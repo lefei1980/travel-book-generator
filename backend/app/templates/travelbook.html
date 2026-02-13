@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ trip.title }} — TravelBook</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @page { size: A4; margin: 15mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color: #2c2c2c;
+    background: #fff;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .cover {
+    text-align: center;
+    padding: 80px 20px 60px;
+    page-break-after: always;
+    border-bottom: 3px double #b8860b;
+    margin-bottom: 40px;
+  }
+  .cover h1 { font-size: 42px; color: #1a1a2e; letter-spacing: 2px; margin-bottom: 12px; }
+  .cover .dates { font-size: 18px; color: #666; font-style: italic; }
+  .cover .subtitle { margin-top: 30px; font-size: 14px; color: #999; text-transform: uppercase; letter-spacing: 4px; }
+
+  .day-section { page-break-before: always; margin-bottom: 40px; }
+  .day-header { display: flex; align-items: baseline; gap: 12px; border-bottom: 2px solid #b8860b; padding-bottom: 8px; margin-bottom: 20px; }
+  .day-number { font-size: 14px; text-transform: uppercase; letter-spacing: 3px; color: #b8860b; font-weight: bold; }
+  .day-title { font-size: 24px; color: #1a1a2e; }
+
+  .map-container { width: 100%; height: 350px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin-bottom: 8px; }
+
+  .map-legend { display: flex; gap: 18px; font-size: 12px; color: #666; margin-bottom: 20px; margin-left: 4px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .legend-line { width: 20px; height: 3px; display: inline-block; border-radius: 2px; }
+
+  .route-summary { display: flex; gap: 24px; background: #f8f6f0; border-radius: 6px; padding: 12px 20px; margin-bottom: 24px; font-size: 14px; }
+  .route-stat { display: flex; align-items: center; gap: 6px; }
+  .route-stat .label { color: #888; }
+  .route-stat .value { font-weight: bold; color: #1a1a2e; }
+
+  .poi-card { display: flex; gap: 16px; margin-bottom: 20px; padding: 16px; border: 1px solid #e8e4dc; border-radius: 8px; background: #fdfcfa; }
+  .poi-image { flex-shrink: 0; width: 180px; height: 135px; object-fit: cover; border-radius: 6px; }
+  .poi-image-placeholder { flex-shrink: 0; width: 180px; height: 135px; border-radius: 6px; background: #e8e4dc; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 12px; }
+  .poi-content { flex: 1; }
+  .poi-name { font-size: 18px; color: #1a1a2e; margin-bottom: 4px; }
+  .poi-type { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; font-weight: bold; }
+  .poi-type-attraction { color: #d63031; }
+  .poi-type-restaurant { color: #e67e22; }
+  .poi-type-hotel { color: #2d3436; }
+  .poi-description { font-size: 13px; line-height: 1.6; color: #444; }
+  .poi-attribution { font-size: 10px; color: #aaa; margin-top: 6px; }
+
+  .page-footer { text-align: center; font-size: 10px; color: #bbb; margin-top: 40px; padding-top: 12px; border-top: 1px solid #e8e4dc; }
+</style>
+</head>
+<body>
+
+<!-- Cover Page -->
+<div class="cover">
+  <div class="subtitle">TravelBook</div>
+  <h1>{{ trip.title }}</h1>
+  {% if trip.start_date and trip.end_date %}
+  <div class="dates">{{ trip.start_date }} – {{ trip.end_date }}</div>
+  {% endif %}
+</div>
+
+<!-- Day Pages -->
+{% for day in days %}
+<div class="day-section">
+  <div class="day-header">
+    <span class="day-number">Day {{ day.day_number }}</span>
+    <span class="day-title">{{ day.start_location or '' }}{% if day.start_location and day.end_location %} → {% endif %}{{ day.end_location or '' }}</span>
+  </div>
+
+  <div id="map-day{{ day.day_number }}" class="map-container"></div>
+  <div class="map-legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#d63031"></span> Attraction</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#e67e22"></span> Restaurant</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#2d3436"></span> Hotel</div>
+    <div class="legend-item"><span class="legend-line" style="background:#0984e3"></span> Route</div>
+  </div>
+
+  {% if day.route %}
+  <div class="route-summary">
+    <div class="route-stat">
+      <span class="label">Total Distance:</span>
+      <span class="value">{{ "%.1f"|format(day.route.total_distance_m / 1000) }} km</span>
+    </div>
+    <div class="route-stat">
+      <span class="label">Driving Time:</span>
+      <span class="value">~{{ (day.route.total_duration_s / 60)|int }} min</span>
+    </div>
+    <div class="route-stat">
+      <span class="label">Stops:</span>
+      <span class="value">{{ day.places|length }} places</span>
+    </div>
+  </div>
+  {% endif %}
+
+  {% for place in day.places %}
+  <div class="poi-card">
+    {% if place.enrichment and place.enrichment.image_url %}
+    <img class="poi-image" src="{{ place.enrichment.image_url }}" alt="{{ place.name }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+    <div class="poi-image-placeholder" style="display:none">No image</div>
+    {% else %}
+    <div class="poi-image-placeholder">No image</div>
+    {% endif %}
+    <div class="poi-content">
+      <div class="poi-name">{{ place.name }}</div>
+      <div class="poi-type poi-type-{{ place.place_type }}">{{ place.place_type }}</div>
+      <div class="poi-description">
+        {% if place.enrichment %}{{ place.enrichment.description }}{% else %}No description available.{% endif %}
+      </div>
+      {% if place.enrichment and place.enrichment.image_attribution %}
+      <div class="poi-attribution">Image: {{ place.enrichment.image_attribution }}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+{% endfor %}
+
+<div class="page-footer">
+  Generated by TravelBook — Maps &copy; OpenStreetMap contributors
+</div>
+
+<script>
+// Colored marker icons
+function makeIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0z" fill="' + color + '"/>' +
+      '<circle cx="12.5" cy="12.5" r="6" fill="white"/></svg>',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [0, -34]
+  });
+}
+var icons = {
+  'attraction': makeIcon('#d63031'),
+  'restaurant': makeIcon('#e67e22'),
+  'hotel': makeIcon('#2d3436')
+};
+
+var mapsReady = 0;
+var totalMaps = {{ days|length }};
+
+{% for day in days %}
+(function() {
+  var map = L.map('map-day{{ day.day_number }}').setView([0, 0], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 18
+  }).addTo(map);
+
+  var bounds = [];
+
+  // Add POI markers
+  {% for place in day.places %}
+  {% if place.latitude and place.longitude %}
+  var m = L.marker([{{ place.latitude }}, {{ place.longitude }}], {
+    icon: icons['{{ place.place_type }}'] || icons['attraction']
+  }).addTo(map).bindPopup('<b>{{ place.name }}</b><br>{{ place.place_type }}');
+  bounds.push([{{ place.latitude }}, {{ place.longitude }}]);
+  {% endif %}
+  {% endfor %}
+
+  // Add route polyline from OSRM geometry
+  {% if day.route and day.route.geometry %}
+  var routeCoords = {{ day.route.geometry.coordinates | tojson }};
+  var latlngs = routeCoords.map(function(c) { return [c[1], c[0]]; });
+  L.polyline(latlngs, {color: '#0984e3', weight: 4, opacity: 0.85}).addTo(map);
+  latlngs.forEach(function(ll) { bounds.push(ll); });
+  {% endif %}
+
+  if (bounds.length > 0) {
+    map.fitBounds(L.latLngBounds(bounds).pad(0.15));
+  }
+
+  // Signal map ready
+  map.whenReady(function() {
+    mapsReady++;
+    if (mapsReady >= totalMaps) {
+      // Small delay to let tiles load
+      setTimeout(function() { window.mapReady = true; }, 2000);
+    }
+  });
+})();
+{% endfor %}
+
+// Fallback: set mapReady after timeout even if tiles haven't all loaded
+setTimeout(function() { window.mapReady = true; }, 10000);
+</script>
+</body>
+</html>

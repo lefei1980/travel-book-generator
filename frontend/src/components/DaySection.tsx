@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { DayInput, PlaceInput } from "@/lib/api";
 
 interface DaySectionProps {
@@ -11,6 +12,9 @@ interface DaySectionProps {
 const PLACE_TYPES = ["attraction", "restaurant", "hotel"] as const;
 
 export default function DaySection({ day, onChange, onRemove }: DaySectionProps) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
   const updatePlace = (index: number, field: keyof PlaceInput, value: string) => {
     const newPlaces = [...day.places];
     newPlaces[index] = { ...newPlaces[index], [field]: value };
@@ -30,6 +34,34 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
       ...day,
       places: day.places.filter((_, i) => i !== index),
     });
+  };
+
+  const handleDragStart = (index: number) => {
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const newPlaces = [...day.places];
+    const [moved] = newPlaces.splice(dragIndex, 1);
+    newPlaces.splice(index, 0, moved);
+    onChange({ ...day, places: newPlaces });
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
   };
 
   return (
@@ -70,10 +102,26 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
 
       <div className="mb-2">
         <label className="block text-sm text-gray-600 mb-1">
-          Places ({day.places.length}/5)
+          Places ({day.places.length}/5) <span className="text-gray-400">— drag to reorder</span>
         </label>
         {day.places.map((place, idx) => (
-          <div key={idx} className="flex gap-2 mb-2">
+          <div
+            key={idx}
+            draggable
+            onDragStart={() => handleDragStart(idx)}
+            onDragOver={(e) => handleDragOver(e, idx)}
+            onDrop={() => handleDrop(idx)}
+            onDragEnd={handleDragEnd}
+            className={`flex gap-2 mb-2 items-center transition-all ${
+              dragIndex === idx ? "opacity-40" : ""
+            } ${dragOverIndex === idx && dragIndex !== idx ? "border-t-2 border-blue-400" : ""}`}
+          >
+            <span
+              className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none px-1"
+              title="Drag to reorder"
+            >
+              ⠿
+            </span>
             <input
               type="text"
               value={place.name}

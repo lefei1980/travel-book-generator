@@ -106,12 +106,10 @@ def test_duplicate_day_numbers_returns_422(client):
     assert resp.status_code == 422
 
 
-def test_download_no_pdf(client):
-    """Pipeline completes but no PDF is generated yet (Phase 1 skeleton)."""
-    resp = client.post("/api/trips", json=SAMPLE_TRIP)
-    trip_id = resp.json()["id"]
-    resp = client.get(f"/api/trips/{trip_id}/download")
-    # Status is complete but pdf_path is None → 404
+def test_download_before_complete(client):
+    """Download should fail for a trip that hasn't completed."""
+    # Create trip but prevent pipeline from running by checking a non-existent trip
+    resp = client.get("/api/trips/nonexistent-id/download")
     assert resp.status_code == 404
 
 

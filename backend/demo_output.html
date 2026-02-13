@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paris Adventure — TravelBook Demo</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @page { size: A4; margin: 15mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color: #2c2c2c;
+    background: #fff;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  /* --- Cover Page --- */
+  .cover {
+    text-align: center;
+    padding: 80px 20px 60px;
+    page-break-after: always;
+    border-bottom: 3px double #b8860b;
+    margin-bottom: 40px;
+  }
+  .cover h1 {
+    font-size: 42px;
+    color: #1a1a2e;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+  .cover .dates {
+    font-size: 18px;
+    color: #666;
+    font-style: italic;
+  }
+  .cover .subtitle {
+    margin-top: 30px;
+    font-size: 14px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+  }
+
+  /* --- Day Section --- */
+  .day-section {
+    page-break-before: always;
+    margin-bottom: 40px;
+  }
+  .day-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    border-bottom: 2px solid #b8860b;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+  }
+  .day-number {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #b8860b;
+    font-weight: bold;
+  }
+  .day-title {
+    font-size: 24px;
+    color: #1a1a2e;
+  }
+
+  /* --- Map --- */
+  .map-container {
+    width: 100%;
+    height: 350px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    margin-bottom: 24px;
+  }
+
+  /* --- Map Legend --- */
+  .map-legend {
+    display: flex;
+    gap: 18px;
+    font-size: 12px;
+    color: #666;
+    margin: -16px 0 20px 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .legend-line {
+    width: 20px;
+    height: 3px;
+    display: inline-block;
+    border-radius: 2px;
+  }
+
+  /* --- Route Summary --- */
+  .route-summary {
+    display: flex;
+    gap: 24px;
+    background: #f8f6f0;
+    border-radius: 6px;
+    padding: 12px 20px;
+    margin-bottom: 24px;
+    font-size: 14px;
+  }
+  .route-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .route-stat .label {
+    color: #888;
+  }
+  .route-stat .value {
+    font-weight: bold;
+    color: #1a1a2e;
+  }
+
+  /* --- POI Card --- */
+  .poi-card {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    padding: 16px;
+    border: 1px solid #e8e4dc;
+    border-radius: 8px;
+    background: #fdfcfa;
+  }
+  .poi-image {
+    flex-shrink: 0;
+    width: 180px;
+    height: 135px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+  .poi-image-placeholder {
+    flex-shrink: 0;
+    width: 180px;
+    height: 135px;
+    border-radius: 6px;
+    background: #e8e4dc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 12px;
+  }
+  .poi-content { flex: 1; }
+  .poi-name {
+    font-size: 18px;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+  }
+  .poi-type {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    font-weight: bold;
+  }
+  .poi-type-attraction { color: #d63031; }
+  .poi-type-restaurant { color: #e67e22; }
+  .poi-type-hotel { color: #2d3436; }
+  .poi-description {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #444;
+  }
+  .poi-attribution {
+    font-size: 10px;
+    color: #aaa;
+    margin-top: 6px;
+  }
+
+  /* --- Footer --- */
+  .page-footer {
+    text-align: center;
+    font-size: 10px;
+    color: #bbb;
+    margin-top: 40px;
+    padding-top: 12px;
+    border-top: 1px solid #e8e4dc;
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== COVER PAGE ========== -->
+<div class="cover">
+  <div class="subtitle">TravelBook</div>
+  <h1>Paris Adventure</h1>
+  <div class="dates">June 1 – June 3, 2025</div>
+</div>
+
+<!-- ========== DAY 1 ========== -->
+<div class="day-section">
+  <div class="day-header">
+    <span class="day-number">Day 1</span>
+    <span class="day-title">CDG Airport → Hotel Le Marais</span>
+  </div>
+
+  <div id="map-day1" class="map-container"></div>
+  <div class="map-legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#d63031"></span> Attraction</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#e67e22"></span> Restaurant</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#2d3436"></span> Hotel</div>
+    <div class="legend-item"><span class="legend-line" style="background:#0984e3"></span> Route</div>
+  </div>
+
+  <div class="route-summary">
+    <div class="route-stat">
+      <span class="label">Total Distance:</span>
+      <span class="value">12.5 km</span>
+    </div>
+    <div class="route-stat">
+      <span class="label">Driving Time:</span>
+      <span class="value">~25 min</span>
+    </div>
+    <div class="route-stat">
+      <span class="label">Stops:</span>
+      <span class="value">3 places</span>
+    </div>
+  </div>
+
+  <!-- Eiffel Tower -->
+  <div class="poi-card">
+    <img class="poi-image"
+         src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/800px-Tour_Eiffel_Wikimedia_Commons.jpg"
+         alt="Eiffel Tower"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+    />
+    <div class="poi-image-placeholder" style="display:none">No image</div>
+    <div class="poi-content">
+      <div class="poi-name">Eiffel Tower</div>
+      <div class="poi-type poi-type-attraction">Attraction</div>
+      <div class="poi-description">
+        Iconic wrought-iron lattice tower on the Champ de Mars, built by Gustave Eiffel for the 1889 World's Fair. Standing 330 m tall, it offers panoramic city views from three observation levels. A global symbol of France and Paris's most-visited paid monument.
+      </div>
+      <div class="poi-attribution">Image: CC BY-SA 3.0, Wikimedia Commons</div>
+    </div>
+  </div>
+
+  <!-- Louvre Museum -->
+  <div class="poi-card">
+    <img class="poi-image"
+         src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/Louvre_Museum_Wikimedia_Commons.jpg/800px-Louvre_Museum_Wikimedia_Commons.jpg"
+         alt="Louvre Museum"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+    />
+    <div class="poi-image-placeholder" style="display:none">No image</div>
+    <div class="poi-content">
+      <div class="poi-name">Louvre Museum</div>
+      <div class="poi-type poi-type-attraction">Attraction</div>
+      <div class="poi-description">
+        The world's most-visited art museum, housed in the historic Louvre Palace on the Right Bank of the Seine. Home to over 380,000 objects including the Mona Lisa and Venus de Milo. The iconic glass pyramid entrance was added in 1989.
+      </div>
+      <div class="poi-attribution">Image: CC BY-SA 3.0, Wikimedia Commons</div>
+    </div>
+  </div>
+
+  <!-- Café de Flore -->
+  <div class="poi-card">
+    <div class="poi-image-placeholder">No image</div>
+    <div class="poi-content">
+      <div class="poi-name">Café de Flore</div>
+      <div class="poi-type poi-type-restaurant">Restaurant</div>
+      <div class="poi-description">
+        Historic Left Bank café in Saint-Germain-des-Prés, famous as the haunt of Sartre and de Beauvoir. A Parisian institution since 1887.
+        <br><br><b>Recommended:</b> Classic croque-monsieur, Welsh rarebit, hot chocolate (a house specialty), and the omelette aux fines herbes.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ========== DAY 2 ========== -->
+<div class="day-section">
+  <div class="day-header">
+    <span class="day-number">Day 2</span>
+    <span class="day-title">Hotel Le Marais → Hotel Le Marais</span>
+  </div>
+
+  <div id="map-day2" class="map-container"></div>
+  <div class="map-legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#d63031"></span> Attraction</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#e67e22"></span> Restaurant</div>
+    <div class="legend-item"><span class="legend-line" style="background:#0984e3"></span> Route</div>
+  </div>
+
+  <div class="route-summary">
+    <div class="route-stat">
+      <span class="label">Total Distance:</span>
+      <span class="value">8.2 km</span>
+    </div>
+    <div class="route-stat">
+      <span class="label">Driving Time:</span>
+      <span class="value">~18 min</span>
+    </div>
+    <div class="route-stat">
+      <span class="label">Stops:</span>
+      <span class="value">2 places</span>
+    </div>
+  </div>
+
+  <!-- Notre-Dame -->
+  <div class="poi-card">
+    <img class="poi-image"
+         src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Notre-Dame_de_Paris%2C_4_October_2017.jpg/800px-Notre-Dame_de_Paris%2C_4_October_2017.jpg"
+         alt="Notre-Dame Cathedral"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+    />
+    <div class="poi-image-placeholder" style="display:none">No image</div>
+    <div class="poi-content">
+      <div class="poi-name">Notre-Dame Cathedral</div>
+      <div class="poi-type poi-type-attraction">Attraction</div>
+      <div class="poi-description">
+        Medieval Gothic masterpiece on Île de la Cité, begun in 1163. Renowned for its flying buttresses, rose windows, and gargoyles. Severely damaged by fire in April 2019; reopened in December 2024 after extensive restoration.
+      </div>
+      <div class="poi-attribution">Image: CC BY-SA 3.0, Wikimedia Commons</div>
+    </div>
+  </div>
+
+  <!-- Le Jules Verne -->
+  <div class="poi-card">
+    <div class="poi-image-placeholder">No image</div>
+    <div class="poi-content">
+      <div class="poi-name">Le Jules Verne</div>
+      <div class="poi-type poi-type-restaurant">Restaurant</div>
+      <div class="poi-description">
+        Michelin-starred restaurant on the Eiffel Tower's second floor, helmed by chef Frédéric Anton. Panoramic views of Paris with refined contemporary French cuisine.
+        <br><br><b>Recommended:</b> Tasting menu with foie gras terrine, line-caught sea bass with caviar, and the signature chocolate soufflé.
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    Generated by TravelBook — Maps © OpenStreetMap contributors
+  </div>
+</div>
+
+<script>
+// ---- Custom colored marker icons ----
+function makeIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0z" fill="' + color + '"/>' +
+      '<circle cx="12.5" cy="12.5" r="6" fill="white"/></svg>',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [0, -34]
+  });
+}
+var attractionIcon = makeIcon('#d63031');
+var restaurantIcon = makeIcon('#e67e22');
+var hotelIcon = makeIcon('#2d3436');
+
+// ---- OSRM actual route fetcher ----
+async function fetchRoute(waypoints, map) {
+  // Build OSRM coordinate string: lon,lat;lon,lat;...
+  var coords = waypoints.map(function(w) { return w[1] + ',' + w[0]; }).join(';');
+  var url = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson';
+  try {
+    var resp = await fetch(url);
+    var data = await resp.json();
+    if (data.code === 'Ok' && data.routes.length > 0) {
+      var geojson = data.routes[0].geometry;
+      // GeoJSON coordinates are [lon, lat], Leaflet needs [lat, lon]
+      var latlngs = geojson.coordinates.map(function(c) { return [c[1], c[0]]; });
+      L.polyline(latlngs, {color: '#0984e3', weight: 4, opacity: 0.85}).addTo(map);
+      return latlngs;
+    }
+  } catch(e) {
+    console.warn('OSRM route fetch failed, falling back to straight lines', e);
+  }
+  // Fallback: straight lines
+  var latlngs = waypoints.map(function(w) { return [w[0], w[1]]; });
+  L.polyline(latlngs, {color: '#0984e3', weight: 4, opacity: 0.85, dashArray: '8, 6'}).addTo(map);
+  return latlngs;
+}
+
+// --- Day 1 Map ---
+var map1 = L.map('map-day1').setView([48.8566, 2.3522], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 18
+}).addTo(map1);
+
+// Day 1 POI markers with colored icons
+L.marker([48.8584, 2.2945], {icon: attractionIcon}).addTo(map1).bindPopup('<b>Eiffel Tower</b><br>Attraction');
+L.marker([48.8606, 2.3376], {icon: attractionIcon}).addTo(map1).bindPopup('<b>Louvre Museum</b><br>Attraction');
+L.marker([48.8540, 2.3325], {icon: restaurantIcon}).addTo(map1).bindPopup('<b>Café de Flore</b><br>Restaurant');
+
+// Day 1: fetch real OSRM route, then fit bounds
+var day1Waypoints = [
+  [48.8584, 2.2945],  // Eiffel Tower
+  [48.8606, 2.3376],  // Louvre
+  [48.8540, 2.3325]   // Café de Flore
+];
+fetchRoute(day1Waypoints, map1).then(function(latlngs) {
+  map1.fitBounds(L.latLngBounds(latlngs).pad(0.15));
+});
+// Fit to markers immediately as fallback
+map1.fitBounds(L.latLngBounds(day1Waypoints).pad(0.15));
+
+// --- Day 2 Map ---
+var map2 = L.map('map-day2').setView([48.8530, 2.3499], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 18
+}).addTo(map2);
+
+L.marker([48.8530, 2.3499], {icon: attractionIcon}).addTo(map2).bindPopup('<b>Notre-Dame Cathedral</b><br>Attraction');
+L.marker([48.8584, 2.2945], {icon: restaurantIcon}).addTo(map2).bindPopup('<b>Le Jules Verne</b><br>Restaurant');
+
+var day2Waypoints = [
+  [48.8530, 2.3499],  // Notre-Dame
+  [48.8584, 2.2945]   // Le Jules Verne
+];
+fetchRoute(day2Waypoints, map2).then(function(latlngs) {
+  map2.fitBounds(L.latLngBounds(latlngs).pad(0.15));
+});
+map2.fitBounds(L.latLngBounds(day2Waypoints).pad(0.15));
+
+window.mapReady = true;
+</script>
+</body>
+</html>

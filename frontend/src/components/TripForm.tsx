@@ -26,12 +26,20 @@ const STORAGE_KEY = "travelbook_draft";
 export default function TripForm() {
   const [title, setTitle] = useState("");
   const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [days, setDays] = useState<DayInput[]>([EMPTY_DAY(1)]);
   const [tripId, setTripId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Auto-calculate end date from start date + number of days
+  const endDate = startDate && days.length > 0
+    ? (() => {
+        const start = new Date(startDate + "T00:00:00");
+        start.setDate(start.getDate() + days.length - 1);
+        return start.toISOString().split("T")[0];
+      })()
+    : "";
 
   // Load draft from localStorage
   useEffect(() => {
@@ -41,7 +49,6 @@ export default function TripForm() {
         const draft = JSON.parse(saved);
         setTitle(draft.title || "");
         setStartDate(draft.startDate || "");
-        setEndDate(draft.endDate || "");
         if (draft.days?.length) setDays(draft.days);
       } catch {
         // ignore invalid saved data
@@ -52,9 +59,9 @@ export default function TripForm() {
   // Save draft to localStorage
   useEffect(() => {
     if (!tripId) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ title, startDate, endDate, days }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ title, startDate, days }));
     }
-  }, [title, startDate, endDate, days, tripId]);
+  }, [title, startDate, days, tripId]);
 
   // Poll for status
   const pollStatus = useCallback(async (id: string) => {
@@ -80,18 +87,26 @@ export default function TripForm() {
     setError(null);
     setSubmitting(true);
 
-    const request: TripCreateRequest = {
-      title,
-      start_date: startDate || undefined,
-      end_date: endDate || undefined,
-      days: days.filter((d) => d.places.some((p) => p.name.trim())),
-    };
+    // Filter out empty places and empty days
+    const cleanDays = days
+      .map((d) => ({
+        ...d,
+        places: d.places.filter((p) => p.name.trim()),
+      }))
+      .filter((d) => d.places.length > 0);
 
-    if (!request.days.length) {
+    if (!cleanDays.length) {
       setError("Add at least one day with at least one place");
       setSubmitting(false);
       return;
     }
+
+    const request: TripCreateRequest = {
+      title,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+      days: cleanDays,
+    };
 
     try {
       const result = await createTrip(request);
@@ -128,7 +143,6 @@ export default function TripForm() {
     setError(null);
     setTitle("");
     setStartDate("");
-    setEndDate("");
     setDays([EMPTY_DAY(1)]);
     localStorage.removeItem(STORAGE_KEY);
   };
@@ -198,12 +212,14 @@ export default function TripForm() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            End Date {endDate && <span className="text-gray-400 font-normal">(auto)</span>}
+          </label>
           <input
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
+            readOnly
+            className="w-full border border-gray-200 rounded-lg px-4 py-2 text-gray-500 bg-gray-50 cursor-not-allowed"
           />
         </div>
       </div>

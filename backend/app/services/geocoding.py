@@ -9,17 +9,18 @@ logger = logging.getLogger(__name__)
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 USER_AGENT = "TravelBookGenerator/1.0 (travelbook@example.com)"
+MAX_RETRIES = 3
 
 # Module-level timestamp for rate limiting across calls
 _last_request_time: float = 0.0
 
 
-def _rate_limit():
-    """Enforce 1 request/sec for Nominatim policy compliance."""
+def _rate_limit(min_delay: float = 1.5):
+    """Enforce minimum delay between Nominatim requests for policy compliance."""
     global _last_request_time
     elapsed = time.monotonic() - _last_request_time
-    if elapsed < 1.0:
-        time.sleep(1.0 - elapsed)
+    if elapsed < min_delay:
+        time.sleep(min_delay - elapsed)
     _last_request_time = time.monotonic()
 
 
@@ -34,29 +35,39 @@ def geocode_place(name: str, db: Session, client: httpx.Client | None = None) ->
         logger.debug(f"Cache hit for '{name}'")
         return (cached.latitude, cached.longitude, cached.display_name or name)
 
-    # Rate limit before API call
-    _rate_limit()
-
-    # Call Nominatim
+    # Call Nominatim with retry logic
     should_close = False
     if client is None:
-        client = httpx.Client(timeout=10.0)
+        client = httpx.Client(timeout=15.0)
         should_close = True
 
+    results = None
     try:
-        response = client.get(
-            NOMINATIM_URL,
-            params={"q": name, "format": "json", "limit": 1},
-            headers={"User-Agent": USER_AGENT},
-        )
-        response.raise_for_status()
-        results = response.json()
-    except Exception as e:
-        logger.error(f"Nominatim request failed for '{name}': {e}")
-        return None
+        for attempt in range(MAX_RETRIES):
+            _rate_limit()
+            try:
+                response = client.get(
+                    NOMINATIM_URL,
+                    params={"q": name, "format": "json", "limit": 1},
+                    headers={"User-Agent": USER_AGENT},
+                )
+                response.raise_for_status()
+                results = response.json()
+                break
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
+                wait = 2 ** (attempt + 1)
+                logger.warning(f"Nominatim attempt {attempt + 1}/{MAX_RETRIES} failed for '{name}': {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+            except Exception as e:
+                logger.error(f"Nominatim request failed for '{name}': {e}")
+                return None
     finally:
         if should_close:
             client.close()
+
+    if results is None:
+        logger.error(f"Nominatim failed after {MAX_RETRIES} retries for '{name}'")
+        return None
 
     if not results:
         logger.warning(f"No geocoding results for '{name}'")

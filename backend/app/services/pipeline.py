@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from app.models import Trip
 from app.services.geocoding import geocode_trip
 from app.services.routing import route_trip
+from app.services.enrichment import enrich_trip
+from app.services.pdf import generate_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +54,17 @@ def run_pipeline(trip_id: str) -> None:
                 trip.enriched_data = enriched
                 db.commit()
 
-            # Phase 3+: enriching, rendering stages
+            elif stage == "enriching":
+                places_data = enrich_trip(db, trip)
+                enriched = dict(trip.enriched_data or {})
+                enriched["places"] = places_data
+                trip.enriched_data = enriched
+                db.commit()
+
+            elif stage == "rendering":
+                pdf_path = generate_pdf(trip)
+                trip.pdf_path = pdf_path
+                db.commit()
 
     except Exception as e:
         logger.exception(f"Pipeline error for trip {trip_id}")
