@@ -1,6 +1,8 @@
 import logging
 from sqlalchemy.orm import Session
 from app.models import Trip
+from app.services.geocoding import geocode_trip
+from app.services.routing import route_trip
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +25,7 @@ def _get_session() -> Session:
 
 
 def run_pipeline(trip_id: str) -> None:
-    """Background pipeline that processes a trip through all stages.
-    Each stage updates the trip status in the database.
-    Actual logic will be added in later phases."""
+    """Background pipeline that processes a trip through all stages."""
     db: Session = _get_session()
     try:
         trip = db.query(Trip).filter(Trip.id == trip_id).first()
@@ -41,6 +41,18 @@ def run_pipeline(trip_id: str) -> None:
             trip.status = stage
             db.commit()
             logger.info(f"Trip {trip_id}: stage={stage}")
+
+            if stage == "geocoding":
+                geocode_trip(db, trip)
+
+            elif stage == "routing":
+                route_data = route_trip(db, trip)
+                enriched = trip.enriched_data or {}
+                enriched["routes"] = route_data
+                trip.enriched_data = enriched
+                db.commit()
+
+            # Phase 3+: enriching, rendering stages
 
     except Exception as e:
         logger.exception(f"Pipeline error for trip {trip_id}")

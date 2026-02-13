@@ -46,3 +46,14 @@ class Place(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     day: Mapped["Day"] = relationship("Day", back_populates="places")
+
+
+class GeocodingCache(Base):
+    __tablename__ = "geocoding_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    place_name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    cached_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

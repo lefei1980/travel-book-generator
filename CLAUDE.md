@@ -82,3 +82,5 @@ travel-book-generator/
 
 ## Session Startup
 Read `CLAUDE.md` and `TODO.md` to resume work.
+
+## IMPORTANT: After completing each phase, update `TODO.md` with the next phase's tasks before ending the session.
