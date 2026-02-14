@@ -1,5 +1,8 @@
 # TravelBook Generator
 
+## GitHub Repository
+**Repo URL**: https://github.com/lefei1980/travel-book-generator
+
 ## Project Goal
 Convert structured itinerary input into a downloadable, professionally formatted, map-rich PDF travel guide.
 
@@ -92,7 +95,15 @@ cp backend/.env.example backend/.env
 # Edit CONTACT_EMAIL with your real email
 ```
 
+## Deployment
+- **Frontend**: Vercel (free tier, HTTPS automatic)
+- **Backend**: Oracle Cloud Always Free VM (HTTP via public IP)
+- **CI/CD**: GitHub Actions (automated deployment)
+- See `DEPLOYMENT.md` for complete deployment guide
+
 ## Session Startup
 Read `CLAUDE.md` and `TODO.md` to resume work.
 
-## IMPORTANT: After completing each phase, update `TODO.md` with the next phase's tasks before ending the session.
+## IMPORTANT: After completing each phase, update `TODO.md` with the next phase's tasks, and remove completed tasks, before ending the session.
+## IMPORTANT: Write debugging and diagnostic notes to `DEBUG_NOTES.md`.
+## IMPORTANT: Never commit sensitive files (SSH keys, .env files, public IP addresses) to the repository.

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist database and generated PDFs
+      - ./data:/app/data
+      - ./output:/app/output
+    environment:
+      - CONTACT_EMAIL=${CONTACT_EMAIL:-your-email@example.com}
+      - MOCK_GEOCODING=${MOCK_GEOCODING:-false}
+      - DATABASE_URL=sqlite:///./data/travelbook.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

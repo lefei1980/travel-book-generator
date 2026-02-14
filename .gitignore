@@ -33,3 +33,13 @@ coverage/
 
 # Generated PDFs
 *.pdf
+
+# Deployment secrets (DO NOT COMMIT)
+*.key
+*.key.pub
+*.pem
+public-IP-address.txt
+trip_output.json
+
+# Local settings
+.claude/settings.local.json
