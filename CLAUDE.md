@@ -80,6 +80,18 @@ travel-book-generator/
 - **MVP enrichment**: Wikipedia + Wikimedia only (no OpenTripMap)
 - **Images**: Only CC/public domain with attribution
 
+## Configuration
+
+### Backend Environment Variables (backend/.env)
+- `CONTACT_EMAIL` — Email for Nominatim User-Agent (must be valid, not example.com)
+- `MOCK_GEOCODING` — Set to `true` to bypass Nominatim and use mock coordinates (useful for testing)
+
+Copy `backend/.env.example` to `backend/.env` and configure:
+```bash
+cp backend/.env.example backend/.env
+# Edit CONTACT_EMAIL with your real email
+```
+
 ## Session Startup
 Read `CLAUDE.md` and `TODO.md` to resume work.
 

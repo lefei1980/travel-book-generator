@@ -14,11 +14,13 @@ def _build_template_data(trip: Trip) -> dict:
     enriched = trip.enriched_data or {}
     routes = enriched.get("routes", {})
     places_enrichment = enriched.get("places", {})
+    start_end_coords = enriched.get("start_end_coords", {})
 
     days = []
     for day in trip.days:
         day_number = str(day.day_number)
         route = routes.get(day_number)
+        coords = start_end_coords.get(day_number, {})
 
         places = []
         for place in day.places:
@@ -35,6 +37,8 @@ def _build_template_data(trip: Trip) -> dict:
             "day_number": day.day_number,
             "start_location": day.start_location,
             "end_location": day.end_location,
+            "start_coords": coords.get("start"),
+            "end_coords": coords.get("end"),
             "route": route,
             "places": places,
         })

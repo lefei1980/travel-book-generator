@@ -76,11 +76,18 @@ class PlaceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RouteResponse(BaseModel):
+    total_distance_m: float
+    total_duration_s: float
+    geometry: dict
+    segments: Optional[list[dict]] = None
+
 class DayResponse(BaseModel):
     day_number: int
     start_location: Optional[str] = None
     end_location: Optional[str] = None
     places: list[PlaceResponse]
+    route: Optional[RouteResponse] = None
 
     model_config = {"from_attributes": True}
 

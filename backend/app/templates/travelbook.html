@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  @page { size: A4; margin: 15mm; }
+  @page { size: A4; margin: 12mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Georgia', 'Times New Roman', serif;
@@ -14,61 +14,222 @@
     background: #fff;
     max-width: 210mm;
     margin: 0 auto;
-    padding: 20px;
+    padding: 15px;
   }
 
+  /* Cover Page */
   .cover {
     text-align: center;
-    padding: 80px 20px 60px;
+    padding: 40px 20px 30px;
     page-break-after: always;
     border-bottom: 3px double #b8860b;
-    margin-bottom: 40px;
+    margin-bottom: 30px;
   }
-  .cover h1 { font-size: 42px; color: #1a1a2e; letter-spacing: 2px; margin-bottom: 12px; }
-  .cover .dates { font-size: 18px; color: #666; font-style: italic; }
-  .cover .subtitle { margin-top: 30px; font-size: 14px; color: #999; text-transform: uppercase; letter-spacing: 4px; }
+  .cover h1 { font-size: 36px; color: #1a1a2e; letter-spacing: 2px; margin-bottom: 10px; }
+  .cover .dates { font-size: 16px; color: #666; font-style: italic; margin-bottom: 20px; }
+  .cover .subtitle { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 25px; }
 
-  .day-section { page-break-before: always; margin-bottom: 40px; }
-  .day-header { display: flex; align-items: baseline; gap: 12px; border-bottom: 2px solid #b8860b; padding-bottom: 8px; margin-bottom: 20px; }
-  .day-number { font-size: 14px; text-transform: uppercase; letter-spacing: 3px; color: #b8860b; font-weight: bold; }
-  .day-title { font-size: 24px; color: #1a1a2e; }
+  /* Trip Summary Map */
+  .summary-map-container {
+    width: 100%;
+    height: 280px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    margin-bottom: 25px;
+  }
 
-  .map-container { width: 100%; height: 350px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin-bottom: 8px; }
+  /* Itinerary Summary */
+  .itinerary-summary {
+    text-align: left;
+    margin-top: 20px;
+  }
+  .itinerary-summary h2 {
+    font-size: 16px;
+    color: #1a1a2e;
+    border-bottom: 2px solid #b8860b;
+    padding-bottom: 8px;
+    margin-bottom: 15px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .day-summary {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 12px;
+    padding: 10px 0;
+    border-bottom: 1px dashed #e8e4dc;
+  }
+  .day-summary-num {
+    font-weight: bold;
+    min-width: 50px;
+  }
+  .day-summary-1 { color: #e74c3c; }
+  .day-summary-2 { color: #3498db; }
+  .day-summary-3 { color: #2ecc71; }
+  .day-summary-4 { color: #9b59b6; }
+  .day-summary-5 { color: #e67e22; }
+  .day-summary-6 { color: #1abc9c; }
+  .day-summary-7 { color: #f39c12; }
+  .day-summary-route {
+    flex: 1;
+    color: #444;
+    font-size: 14px;
+  }
+  .day-summary-stops {
+    color: #888;
+    font-size: 13px;
+  }
 
-  .map-legend { display: flex; gap: 18px; font-size: 12px; color: #666; margin-bottom: 20px; margin-left: 4px; }
-  .legend-item { display: flex; align-items: center; gap: 5px; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .legend-line { width: 20px; height: 3px; display: inline-block; border-radius: 2px; }
+  /* Day Section - compact for single page */
+  .day-section { page-break-before: always; margin-bottom: 20px; }
+  .day-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    border-bottom: 2px solid #b8860b;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+  }
+  .day-number { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #b8860b; font-weight: bold; }
+  .day-title { font-size: 20px; color: #1a1a2e; }
 
-  .route-summary { display: flex; gap: 24px; background: #f8f6f0; border-radius: 6px; padding: 12px 20px; margin-bottom: 24px; font-size: 14px; }
-  .route-stat { display: flex; align-items: center; gap: 6px; }
+  /* Smaller map for day page */
+  .map-container {
+    width: 100%;
+    height: 200px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    margin-bottom: 6px;
+  }
+
+  /* Hide zoom controls in PDF */
+  .leaflet-control-zoom { display: none !important; }
+
+  .map-legend {
+    display: flex;
+    gap: 15px;
+    font-size: 10px;
+    color: #666;
+    margin-bottom: 12px;
+    margin-left: 4px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .legend-line { width: 16px; height: 2px; display: inline-block; border-radius: 1px; }
+
+  .route-summary {
+    display: flex;
+    gap: 20px;
+    background: #f8f6f0;
+    border-radius: 4px;
+    padding: 8px 15px;
+    margin-bottom: 15px;
+    font-size: 12px;
+  }
+  .route-stat { display: flex; align-items: center; gap: 4px; }
   .route-stat .label { color: #888; }
   .route-stat .value { font-weight: bold; color: #1a1a2e; }
 
-  .poi-card { display: flex; gap: 16px; margin-bottom: 20px; padding: 16px; border: 1px solid #e8e4dc; border-radius: 8px; background: #fdfcfa; }
-  .poi-image { flex-shrink: 0; width: 180px; height: 135px; object-fit: cover; border-radius: 6px; }
-  .poi-image-placeholder { flex-shrink: 0; width: 180px; height: 135px; border-radius: 6px; background: #e8e4dc; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 12px; }
-  .poi-content { flex: 1; }
-  .poi-name { font-size: 18px; color: #1a1a2e; margin-bottom: 4px; }
-  .poi-type { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; font-weight: bold; }
+  /* Compact POI cards */
+  .poi-card {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid #e8e4dc;
+    border-radius: 6px;
+    background: #fdfcfa;
+    position: relative;
+  }
+  .poi-number {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background: #1a1a2e;
+    color: white;
+    font-weight: bold;
+    font-size: 11px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  .poi-image {
+    flex-shrink: 0;
+    width: 100px;
+    height: 75px;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+  .poi-image-placeholder {
+    flex-shrink: 0;
+    width: 100px;
+    height: 75px;
+    border-radius: 4px;
+    background: #e8e4dc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 10px;
+  }
+  .poi-content { flex: 1; min-width: 0; }
+  .poi-name { font-size: 14px; color: #1a1a2e; margin-bottom: 2px; }
+  .poi-type { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold; }
   .poi-type-attraction { color: #d63031; }
   .poi-type-restaurant { color: #e67e22; }
   .poi-type-hotel { color: #2d3436; }
-  .poi-description { font-size: 13px; line-height: 1.6; color: #444; }
-  .poi-attribution { font-size: 10px; color: #aaa; margin-top: 6px; }
+  .poi-description {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #444;
+    /* Limit description to 3 lines */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .poi-attribution { font-size: 8px; color: #aaa; margin-top: 3px; }
 
-  .page-footer { text-align: center; font-size: 10px; color: #bbb; margin-top: 40px; padding-top: 12px; border-top: 1px solid #e8e4dc; }
+  .page-footer {
+    text-align: center;
+    font-size: 9px;
+    color: #bbb;
+    margin-top: 20px;
+    padding-top: 8px;
+    border-top: 1px solid #e8e4dc;
+  }
 </style>
 </head>
 <body>
 
-<!-- Cover Page -->
+<!-- Cover Page with Summary -->
 <div class="cover">
   <div class="subtitle">TravelBook</div>
   <h1>{{ trip.title }}</h1>
   {% if trip.start_date and trip.end_date %}
   <div class="dates">{{ trip.start_date }} – {{ trip.end_date }}</div>
   {% endif %}
+
+  <!-- Trip Overview Map -->
+  <div id="summary-map" class="summary-map-container"></div>
+
+  <!-- Itinerary Summary -->
+  <div class="itinerary-summary">
+    <h2>Trip Overview</h2>
+    {% for day in days %}
+    <div class="day-summary">
+      <span class="day-summary-num day-summary-{{ day.day_number }}">Day {{ day.day_number }}</span>
+      <span class="day-summary-route">{{ day.start_location or 'Start' }}{% if day.start_location and day.end_location %} → {% endif %}{{ day.end_location or 'End' }}</span>
+      <span class="day-summary-stops">{{ day.places|length }} stops</span>
+    </div>
+    {% endfor %}
+  </div>
 </div>
 
 <!-- Day Pages -->
@@ -90,22 +251,23 @@
   {% if day.route %}
   <div class="route-summary">
     <div class="route-stat">
-      <span class="label">Total Distance:</span>
+      <span class="label">Distance:</span>
       <span class="value">{{ "%.1f"|format(day.route.total_distance_m / 1000) }} km</span>
     </div>
     <div class="route-stat">
-      <span class="label">Driving Time:</span>
+      <span class="label">Time:</span>
       <span class="value">~{{ (day.route.total_duration_s / 60)|int }} min</span>
     </div>
     <div class="route-stat">
       <span class="label">Stops:</span>
-      <span class="value">{{ day.places|length }} places</span>
+      <span class="value">{{ day.places|length }}</span>
     </div>
   </div>
   {% endif %}
 
   {% for place in day.places %}
   <div class="poi-card">
+    <div class="poi-number">{{ loop.index }}</div>
     {% if place.enrichment and place.enrichment.image_url %}
     <img class="poi-image" src="{{ place.enrichment.image_url }}" alt="{{ place.name }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
     <div class="poi-image-placeholder" style="display:none">No image</div>
@@ -113,7 +275,12 @@
     <div class="poi-image-placeholder">No image</div>
     {% endif %}
     <div class="poi-content">
-      <div class="poi-name">{{ place.name }}</div>
+      <div class="poi-name">
+        {{ place.name }}
+        {% if place.enrichment and place.enrichment.native_name %}
+        <span style="color: #888; font-size: 11px; font-weight: normal;"> ({{ place.enrichment.native_name }})</span>
+        {% endif %}
+      </div>
       <div class="poi-type poi-type-{{ place.place_type }}">{{ place.place_type }}</div>
       <div class="poi-description">
         {% if place.enrichment %}{{ place.enrichment.description }}{% else %}No description available.{% endif %}
@@ -129,22 +296,73 @@
 {% endfor %}
 
 <div class="page-footer">
-  Generated by TravelBook — Maps &copy; OpenStreetMap contributors
+  Generated by TravelBook — Maps © OpenStreetMap contributors
 </div>
 
 <script>
+// Day colors for front page
+var dayColors = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#f39c12'];
+
 // Colored marker icons
 function makeIcon(color) {
   return L.divIcon({
     className: '',
-    html: '<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
+    html: '<svg width="20" height="33" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">' +
       '<path d="M12.5 0C5.6 0 0 5.6 0 12.5C0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0z" fill="' + color + '"/>' +
       '<circle cx="12.5" cy="12.5" r="6" fill="white"/></svg>',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [0, -34]
+    iconSize: [20, 33],
+    iconAnchor: [10, 33],
+    popupAnchor: [0, -28]
   });
 }
+
+// Numbered marker icons
+function makeNumberedIcon(number, color) {
+  return L.divIcon({
+    className: '',
+    html: '<svg width="26" height="38" viewBox="0 0 26 38" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M13 0C5.8 0 0 5.8 0 13C0 22.8 13 38 13 38S26 22.8 26 13C26 5.8 20.2 0 13 0z" fill="' + color + '"/>' +
+      '<circle cx="13" cy="13" r="9" fill="white"/>' +
+      '<text x="13" y="17.5" font-family="Arial,sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="' + color + '">' + number + '</text>' +
+      '</svg>',
+    iconSize: [26, 38],
+    iconAnchor: [13, 38],
+    popupAnchor: [0, -32]
+  });
+}
+
+// Start marker (green flag)
+function makeStartIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">' +
+      '<circle cx="5" cy="35" r="4" fill="#27ae60"/>' +
+      '<rect x="4" y="5" width="2" height="30" fill="#27ae60"/>' +
+      '<path d="M6 5 L25 10 L25 20 L6 15 Z" fill="#27ae60"/>' +
+      '<text x="15" y="17" font-family="Arial,sans-serif" font-size="8" font-weight="bold" text-anchor="middle" fill="white">START</text>' +
+      '</svg>',
+    iconSize: [30, 40],
+    iconAnchor: [5, 35],
+    popupAnchor: [10, -30]
+  });
+}
+
+// End marker (red flag)
+function makeEndIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">' +
+      '<circle cx="5" cy="35" r="4" fill="#c0392b"/>' +
+      '<rect x="4" y="5" width="2" height="30" fill="#c0392b"/>' +
+      '<path d="M6 5 L25 10 L25 20 L6 15 Z" fill="#c0392b"/>' +
+      '<text x="15" y="17" font-family="Arial,sans-serif" font-size="9" font-weight="bold" text-anchor="middle" fill="white">END</text>' +
+      '</svg>',
+    iconSize: [30, 40],
+    iconAnchor: [5, 35],
+    popupAnchor: [10, -30]
+  });
+}
+
 var icons = {
   'attraction': makeIcon('#d63031'),
   'restaurant': makeIcon('#e67e22'),
@@ -152,46 +370,131 @@ var icons = {
 };
 
 var mapsReady = 0;
-var totalMaps = {{ days|length }};
+var totalMaps = {{ days|length }} + 1; // +1 for summary map
 
-{% for day in days %}
+// Summary Map - Shows all trip locations with day-colored markers (no route)
 (function() {
-  var map = L.map('map-day{{ day.day_number }}').setView([0, 0], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
-    maxZoom: 18
+  var map = L.map('summary-map', { zoomControl: false }).setView([0, 0], 13);
+  // Use CartoDB Voyager for better contrast and readability
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap, © CARTO',
+    maxZoom: 19,
+    subdomains: 'abcd'
   }).addTo(map);
 
   var bounds = [];
+  var allCoords = [];
 
-  // Add POI markers
+  {% for day in days %}
   {% for place in day.places %}
   {% if place.latitude and place.longitude %}
-  var m = L.marker([{{ place.latitude }}, {{ place.longitude }}], {
-    icon: icons['{{ place.place_type }}'] || icons['attraction']
-  }).addTo(map).bindPopup('<b>{{ place.name }}</b><br>{{ place.place_type }}');
+  allCoords.push({
+    lat: {{ place.latitude }},
+    lng: {{ place.longitude }},
+    name: '{{ place.name }}',
+    type: '{{ place.place_type }}',
+    day: {{ day.day_number }}
+  });
+  bounds.push([{{ place.latitude }}, {{ place.longitude }}]);
+  {% endif %}
+  {% endfor %}
+  {% endfor %}
+
+  // Add day-colored markers (no duplicates)
+  var seen = {};
+  allCoords.forEach(function(c) {
+    var key = c.lat.toFixed(4) + ',' + c.lng.toFixed(4);
+    if (!seen[key]) {
+      seen[key] = true;
+      var dayColor = dayColors[(c.day - 1) % dayColors.length];
+      L.marker([c.lat, c.lng], {
+        icon: makeIcon(dayColor)
+      }).addTo(map).bindPopup('<b>Day ' + c.day + ':</b> ' + c.name);
+    }
+  });
+
+  if (bounds.length > 0) {
+    map.fitBounds(L.latLngBounds(bounds).pad(0.1));
+  }
+
+  map.whenReady(function() {
+    mapsReady++;
+    if (mapsReady >= totalMaps) {
+      setTimeout(function() { window.mapReady = true; }, 1500);
+    }
+  });
+})();
+
+// Day Maps
+{% for day in days %}
+(function() {
+  var map = L.map('map-day{{ day.day_number }}', { zoomControl: false }).setView([0, 0], 13);
+  // Use CartoDB Voyager for better contrast
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap, © CARTO',
+    maxZoom: 19,
+    subdomains: 'abcd'
+  }).addTo(map);
+
+  var bounds = [];
+  var places = [];
+
+  // Add START marker and to bounds
+  {% if day.start_coords %}
+  L.marker([{{ day.start_coords.lat }}, {{ day.start_coords.lng }}], { icon: makeStartIcon() })
+    .addTo(map)
+    .bindPopup('<b>START:</b> {{ day.start_coords.name }}');
+  bounds.push([{{ day.start_coords.lat }}, {{ day.start_coords.lng }}]);
+  {% endif %}
+
+  // Collect all POI places
+  {% for place in day.places %}
+  {% if place.latitude and place.longitude %}
+  places.push({
+    lat: {{ place.latitude }},
+    lng: {{ place.longitude }},
+    name: '{{ place.name }}',
+    type: '{{ place.place_type }}'
+  });
   bounds.push([{{ place.latitude }}, {{ place.longitude }}]);
   {% endif %}
   {% endfor %}
 
-  // Add route polyline from OSRM geometry
+  // Add numbered markers for ALL POIs
+  places.forEach(function(p, idx) {
+    var num = idx + 1;
+    var color = (p.type === 'attraction') ? '#d63031' : (p.type === 'restaurant') ? '#e67e22' : '#2d3436';
+    var icon = makeNumberedIcon(num, color);
+
+    L.marker([p.lat, p.lng], { icon: icon })
+      .addTo(map)
+      .bindPopup('<b>' + num + '. ' + p.name + '</b><br>' + p.type);
+  });
+
+  // Add END marker and to bounds
+  {% if day.end_coords %}
+  L.marker([{{ day.end_coords.lat }}, {{ day.end_coords.lng }}], { icon: makeEndIcon() })
+    .addTo(map)
+    .bindPopup('<b>END:</b> {{ day.end_coords.name }}');
+  bounds.push([{{ day.end_coords.lat }}, {{ day.end_coords.lng }}]);
+  {% endif %}
+
+  // Add route polyline from OSRM geometry (always show full route)
   {% if day.route and day.route.geometry %}
   var routeCoords = {{ day.route.geometry.coordinates | tojson }};
   var latlngs = routeCoords.map(function(c) { return [c[1], c[0]]; });
-  L.polyline(latlngs, {color: '#0984e3', weight: 4, opacity: 0.85}).addTo(map);
-  latlngs.forEach(function(ll) { bounds.push(ll); });
+  L.polyline(latlngs, {color: '#0984e3', weight: 4, opacity: 0.7}).addTo(map);
   {% endif %}
 
+  // Fit map to show start, all POIs, and end
   if (bounds.length > 0) {
-    map.fitBounds(L.latLngBounds(bounds).pad(0.15));
+    map.fitBounds(L.latLngBounds(bounds).pad(0.1));
   }
 
-  // Signal map ready
   map.whenReady(function() {
     mapsReady++;
     if (mapsReady >= totalMaps) {
-      // Small delay to let tiles load
-      setTimeout(function() { window.mapReady = true; }, 2000);
+      setTimeout(function() { window.mapReady = true; }, 1500);
     }
   });
 })();

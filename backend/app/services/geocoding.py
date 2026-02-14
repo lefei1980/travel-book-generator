@@ -1,15 +1,41 @@
 import asyncio
 import logging
+import os
 import time
+from pathlib import Path
+
 import httpx
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
+
 from app.models import GeocodingCache
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent.parent.parent / ".env"
+load_dotenv(env_path)
 
 logger = logging.getLogger(__name__)
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-USER_AGENT = "TravelBookGenerator/1.0 (travelbook@example.com)"
+CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", "travelbook@localhost.local")
+USER_AGENT = f"TravelBookGenerator/1.0 ({CONTACT_EMAIL})"
+MOCK_GEOCODING = os.getenv("MOCK_GEOCODING", "false").lower() == "true"
 MAX_RETRIES = 3
+
+# Log configuration on module load (use print for visibility)
+print(f"[GEOCODING CONFIG] Loaded from: {env_path}")
+print(f"[GEOCODING CONFIG] CONTACT_EMAIL={CONTACT_EMAIL}")
+print(f"[GEOCODING CONFIG] MOCK_GEOCODING={MOCK_GEOCODING}")
+print(f"[GEOCODING CONFIG] Raw env value: {os.getenv('MOCK_GEOCODING', 'NOT_SET')}")
+
+# Mock coordinates for testing when API is unavailable
+MOCK_COORDS = {
+    "paris": (48.8566, 2.3522, "Paris, France"),
+    "london": (51.5074, -0.1278, "London, UK"),
+    "tokyo": (35.6762, 139.6503, "Tokyo, Japan"),
+    "new york": (40.7128, -74.0060, "New York, USA"),
+    "default": (0.0, 0.0, "Unknown Location"),
+}
 
 # Module-level timestamp for rate limiting across calls
 _last_request_time: float = 0.0
@@ -24,16 +50,40 @@ def _rate_limit(min_delay: float = 1.5):
     _last_request_time = time.monotonic()
 
 
+def _get_mock_coords(name: str) -> tuple[float, float, str]:
+    """Return mock coordinates for testing without external API."""
+    name_lower = name.lower()
+    for key, coords in MOCK_COORDS.items():
+        if key in name_lower:
+            return coords
+    return MOCK_COORDS["default"]
+
+
 def geocode_place(name: str, db: Session, client: httpx.Client | None = None) -> tuple[float, float, str] | None:
     """Geocode a place name to (lat, lon, display_name).
     Checks SQLite cache first, then calls Nominatim API.
-    Returns None if no results found."""
+    Returns None if no results found.
+    If MOCK_GEOCODING is enabled, returns mock coordinates."""
 
     # Check cache
     cached = db.query(GeocodingCache).filter(GeocodingCache.place_name == name).first()
     if cached:
         logger.debug(f"Cache hit for '{name}'")
         return (cached.latitude, cached.longitude, cached.display_name or name)
+
+    # Mock mode for testing
+    if MOCK_GEOCODING:
+        logger.info(f"MOCK_GEOCODING enabled: returning mock coordinates for '{name}'")
+        coords = _get_mock_coords(name)
+        cache_entry = GeocodingCache(
+            place_name=name,
+            latitude=coords[0],
+            longitude=coords[1],
+            display_name=coords[2],
+        )
+        db.add(cache_entry)
+        db.commit()
+        return coords
 
     # Call Nominatim with retry logic
     should_close = False
@@ -54,7 +104,19 @@ def geocode_place(name: str, db: Session, client: httpx.Client | None = None) ->
                 response.raise_for_status()
                 results = response.json()
                 break
-            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
+            except httpx.HTTPStatusError as e:
+                wait = 2 ** (attempt + 1)
+                if e.response.status_code == 403:
+                    logger.error(
+                        f"Nominatim returned 403 Forbidden for '{name}'. "
+                        f"This is likely because the CONTACT_EMAIL in .env is invalid or blocked. "
+                        f"Current User-Agent: {USER_AGENT}. "
+                        f"Please update backend/.env with a valid email, or set MOCK_GEOCODING=true for testing."
+                    )
+                else:
+                    logger.warning(f"Nominatim attempt {attempt + 1}/{MAX_RETRIES} failed for '{name}': {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
                 wait = 2 ** (attempt + 1)
                 logger.warning(f"Nominatim attempt {attempt + 1}/{MAX_RETRIES} failed for '{name}': {e}. Retrying in {wait}s...")
                 time.sleep(wait)
@@ -92,6 +154,21 @@ def geocode_place(name: str, db: Session, client: httpx.Client | None = None) ->
     return (lat, lon, display_name)
 
 
+def _extract_city_context(location: str | None) -> str | None:
+    """Extract city/country context from a location string.
+    E.g., 'Charles de Gaulle Airport, Paris' -> 'Paris'
+    E.g., 'Hotel des Arts, Paris' -> 'Paris'"""
+    if not location:
+        return None
+
+    # Split by comma and take the last meaningful part
+    parts = [p.strip() for p in location.split(',')]
+    # Return the last 1-2 parts (e.g., "Paris" or "Paris, France")
+    if len(parts) >= 2:
+        return ', '.join(parts[-2:]) if len(parts) > 2 else parts[-1]
+    return None
+
+
 def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
     """Geocode all places in a trip, updating coordinates in the DB.
     Also geocodes start/end locations for each day."""
@@ -107,9 +184,21 @@ def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
                 if location_name:
                     geocode_place(location_name, db, client)
 
-            # Geocode each place
+            # Extract city context from start or end location
+            city_context = (
+                _extract_city_context(day.start_location) or
+                _extract_city_context(day.end_location)
+            )
+
+            # Geocode each place with city context
             for place in day.places:
-                result = geocode_place(place.name, db, client)
+                # Add city context to improve geocoding accuracy
+                query = place.name
+                if city_context and city_context.lower() not in place.name.lower():
+                    query = f"{place.name}, {city_context}"
+
+                logger.info(f"Geocoding place '{place.name}' with query: '{query}' (context: '{city_context}')")
+                result = geocode_place(query, db, client)
                 if result:
                     place.latitude, place.longitude = result[0], result[1]
 

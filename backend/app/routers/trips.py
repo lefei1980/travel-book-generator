@@ -51,7 +51,40 @@ def get_trip(trip_id: str, db: Session = Depends(get_db)):
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
-    return trip
+
+    # Build response with route data from enriched_data
+    enriched = trip.enriched_data or {}
+    routes = enriched.get("routes", {})
+
+    days_data = []
+    for day in trip.days:
+        day_route = routes.get(str(day.day_number))
+        places_data = [
+            {
+                "name": p.name,
+                "place_type": p.place_type,
+                "latitude": p.latitude,
+                "longitude": p.longitude,
+            }
+            for p in day.places
+        ]
+        days_data.append({
+            "day_number": day.day_number,
+            "start_location": day.start_location,
+            "end_location": day.end_location,
+            "places": places_data,
+            "route": day_route,
+        })
+
+    return {
+        "id": trip.id,
+        "title": trip.title,
+        "start_date": trip.start_date,
+        "end_date": trip.end_date,
+        "status": trip.status,
+        "error_message": trip.error_message,
+        "days": days_data,
+    }
 
 
 @router.get("/{trip_id}/download")

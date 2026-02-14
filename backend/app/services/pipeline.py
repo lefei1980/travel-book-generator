@@ -46,12 +46,37 @@ def run_pipeline(trip_id: str) -> None:
 
             if stage == "geocoding":
                 geocode_trip(db, trip)
+                # Store start/end coordinates for map rendering
+                start_end_coords = {}
+                for day in trip.days:
+                    from app.models import GeocodingCache
+                    coords = {}
+                    if day.start_location:
+                        cached = db.query(GeocodingCache).filter(
+                            GeocodingCache.place_name.like(f"%{day.start_location}%")
+                        ).first()
+                        if cached:
+                            coords["start"] = {"lat": cached.latitude, "lng": cached.longitude, "name": day.start_location}
+                    if day.end_location:
+                        cached = db.query(GeocodingCache).filter(
+                            GeocodingCache.place_name.like(f"%{day.end_location}%")
+                        ).first()
+                        if cached:
+                            coords["end"] = {"lat": cached.latitude, "lng": cached.longitude, "name": day.end_location}
+                    start_end_coords[str(day.day_number)] = coords
+
+                enriched = trip.enriched_data or {}
+                enriched["start_end_coords"] = start_end_coords
+                trip.enriched_data = enriched
+                db.commit()
 
             elif stage == "routing":
                 route_data = route_trip(db, trip)
-                enriched = trip.enriched_data or {}
+                enriched = dict(trip.enriched_data or {})
                 enriched["routes"] = route_data
                 trip.enriched_data = enriched
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(trip, "enriched_data")
                 db.commit()
 
             elif stage == "enriching":
