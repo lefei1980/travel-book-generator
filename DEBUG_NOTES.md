@@ -179,3 +179,160 @@ All core functionality implemented and tested:
 - [x] Geocoding with city context
 - [x] Keyword-based descriptions
 - [x] PDF generation with Playwright
+
+---
+
+## Phase 6: Deployment Issues (2026-02-14/15)
+
+### Issue 1: Backend Deployment Failed ❌
+
+**Error Message** (from GitHub Actions):
+```
+2026/02/14 19:45:15 Error: missing server host
+```
+
+**Root Cause**:
+GitHub Secrets are **NOT configured** in the repository. The workflow files (`.github/workflows/deploy-backend.yml` and `deploy-frontend.yml`) are correct, but they reference secrets that don't exist yet.
+
+**Required Secrets** (6 total):
+
+#### Backend Deployment (3 secrets)
+- `ORACLE_VM_HOST` - Oracle Cloud VM public IP address (e.g., `123.45.67.89`)
+- `ORACLE_VM_USER` - SSH username (usually `ubuntu`)
+- `ORACLE_VM_SSH_KEY` - SSH private key for GitHub Actions authentication
+
+#### Frontend Deployment (3 secrets)
+- `VERCEL_TOKEN` - Vercel API token (from https://vercel.com/account/tokens)
+- `VERCEL_ORG_ID` - Vercel organization ID (from `.vercel/project.json`)
+- `VERCEL_PROJECT_ID` - Vercel project ID (from `.vercel/project.json`)
+
+**Current Status**: None of these secrets are configured yet.
+
+---
+
+### Solution Steps
+
+#### Prerequisites (Must Do First)
+
+1. **Set Up Oracle Cloud VM**
+   - Create VM at https://cloud.oracle.com (Always Free tier)
+   - Configure security list: open ports 22 (SSH) and 8000 (HTTP)
+   - Note your VM's public IP address
+
+2. **Deploy Backend Manually to VM First**
+   ```bash
+   # SSH into VM
+   ssh ubuntu@YOUR_VM_IP
+
+   # Install Docker + Docker Compose
+   sudo apt update
+   sudo apt install -y docker.io docker-compose git
+   sudo usermod -aG docker ubuntu
+   exit && ssh ubuntu@YOUR_VM_IP  # Reconnect
+
+   # Clone repo
+   cd ~
+   git clone https://github.com/lefei1980/travel-book-generator.git
+
+   # Set up backend
+   cd travel-book-generator/backend
+   cp .env.example .env
+   nano .env  # Edit CONTACT_EMAIL
+
+   # Deploy
+   chmod +x deploy.sh
+   ./deploy.sh
+
+   # Verify
+   curl http://localhost:8000/health
+   # Should return: {"status":"ok"}
+   ```
+
+3. **Create SSH Key for GitHub Actions**
+   ```bash
+   # On your LOCAL machine
+   ssh-keygen -t ed25519 -f ~/.ssh/github_actions_oracle -N ""
+
+   # Copy public key to VM
+   ssh-copy-id -i ~/.ssh/github_actions_oracle.pub ubuntu@YOUR_VM_IP
+
+   # Test connection
+   ssh -i ~/.ssh/github_actions_oracle ubuntu@YOUR_VM_IP
+   # Should work without password
+   exit
+
+   # Get private key content (for GitHub Secret)
+   cat ~/.ssh/github_actions_oracle
+   # Copy the ENTIRE output
+   ```
+
+#### Add Secrets to GitHub
+
+1. Go to https://github.com/lefei1980/travel-book-generator
+2. Click **Settings** → **Secrets and variables** → **Actions**
+3. Click **New repository secret**
+4. Add all 6 secrets (see above for values)
+
+#### Test Backend Deployment
+
+After adding the 3 backend secrets:
+```bash
+# Make a small change
+cd backend/app
+echo "# Test" >> main.py
+
+git add .
+git commit -m "Test backend deployment"
+git push origin main
+```
+
+Watch at: https://github.com/lefei1980/travel-book-generator/actions
+
+#### Set Up Vercel (Frontend)
+
+```bash
+cd frontend
+
+# Install Vercel CLI
+npm install -g vercel
+
+# Login and link project
+vercel login
+vercel link
+
+# Get org and project IDs
+cat .vercel/project.json
+# Copy orgId and projectId values
+```
+
+Add the 3 frontend secrets to GitHub, then test with a frontend change.
+
+---
+
+### Troubleshooting Guide
+
+**"missing server host"** → `ORACLE_VM_HOST` secret not set
+**"Permission denied"** → SSH key not in VM's `~/.ssh/authorized_keys`
+**"git pull fails"** → Run `git reset --hard origin/main` on VM
+**"Health check fails"** → Check `docker-compose logs -f` on VM
+**"Vercel deployment fails"** → Verify token is valid, re-run `vercel link`
+
+---
+
+### Current Deployment Status
+
+- [ ] Oracle Cloud VM created and configured
+- [ ] Backend deployed manually to VM (working at http://localhost:8000)
+- [ ] SSH key created and added to VM
+- [ ] GitHub Secrets configured (0/6 done)
+  - [ ] ORACLE_VM_HOST
+  - [ ] ORACLE_VM_USER
+  - [ ] ORACLE_VM_SSH_KEY
+  - [ ] VERCEL_TOKEN
+  - [ ] VERCEL_ORG_ID
+  - [ ] VERCEL_PROJECT_ID
+- [ ] Backend auto-deployment tested
+- [ ] Frontend auto-deployment tested
+- [ ] End-to-end app working in production
+
+**Next Step**: Follow the prerequisite steps above before attempting deployment again.

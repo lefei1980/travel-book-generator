@@ -40,6 +40,7 @@ coverage/
 *.pem
 public-IP-address.txt
 trip_output.json
+vercel_api_token.txt
 
 # Local settings
 .claude/settings.local.json
