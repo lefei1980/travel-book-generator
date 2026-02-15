@@ -76,3 +76,40 @@ export async function getTrip(id: string): Promise<TripResponse> {
 export function getDownloadUrl(id: string): string {
   return `${API_BASE}/api/trips/${id}/download`;
 }
+
+export interface GeocodeResult {
+  display_name: string;
+  lat: number;
+  lon: number;
+  type: string;
+  importance: number;
+}
+
+export interface GeocodePreviewResponse {
+  query: string;
+  results: GeocodeResult[];
+  total: number;
+  message?: string;
+}
+
+export async function geocodePreview(
+  query: string,
+  limit: number = 10
+): Promise<GeocodePreviewResponse> {
+  if (!query.trim()) {
+    return {
+      query,
+      results: [],
+      total: 0,
+      message: "Query cannot be empty",
+    };
+  }
+
+  const res = await fetch(
+    `${API_BASE}/api/geocode/preview?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  if (!res.ok) {
+    throw new Error("Failed to fetch geocoding preview");
+  }
+  return res.json();
+}

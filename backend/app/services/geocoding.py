@@ -59,6 +59,66 @@ def _get_mock_coords(name: str) -> tuple[float, float, str]:
     return MOCK_COORDS["default"]
 
 
+def geocode_preview(name: str, db: Session, limit: int = 10, client: httpx.Client | None = None) -> list[dict]:
+    """Preview geocoding results for a location query.
+    Returns multiple results (up to limit) to help users verify accuracy.
+
+    Returns list of dicts with:
+    - display_name: Human-readable location name
+    - lat: Latitude
+    - lon: Longitude
+    - type: Location type (e.g., 'city', 'tourism', 'peak')
+    - importance: Nominatim importance score (0-1)
+    """
+    # Mock mode for testing
+    if MOCK_GEOCODING:
+        logger.info(f"MOCK_GEOCODING enabled: returning mock preview for '{name}'")
+        coords = _get_mock_coords(name)
+        return [{
+            "display_name": coords[2],
+            "lat": coords[0],
+            "lon": coords[1],
+            "type": "mock",
+            "importance": 1.0
+        }]
+
+    # Call Nominatim with multiple results
+    should_close = False
+    if client is None:
+        client = httpx.Client(timeout=15.0)
+        should_close = True
+
+    results = []
+    try:
+        _rate_limit()
+        try:
+            response = client.get(
+                NOMINATIM_URL,
+                params={"q": name, "format": "json", "limit": limit},
+                headers={"User-Agent": USER_AGENT},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            for item in data:
+                results.append({
+                    "display_name": item.get("display_name", name),
+                    "lat": float(item["lat"]),
+                    "lon": float(item["lon"]),
+                    "type": item.get("type", "unknown"),
+                    "importance": float(item.get("importance", 0)),
+                })
+
+        except Exception as e:
+            logger.error(f"Nominatim preview request failed for '{name}': {e}")
+
+    finally:
+        if should_close:
+            client.close()
+
+    return results
+
+
 def geocode_place(name: str, db: Session, client: httpx.Client | None = None) -> tuple[float, float, str] | None:
     """Geocode a place name to (lat, lon, display_name).
     Checks SQLite cache first, then calls Nominatim API.

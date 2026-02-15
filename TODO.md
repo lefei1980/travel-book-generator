@@ -1,158 +1,159 @@
-## Phase 6: Deployment ✅ (Ready to Deploy!)
-
-### Simplified Architecture: 100% Free, No Custom Domain
-
-**Architecture:**
-- **Frontend**: Vercel (free tier, HTTPS automatic)
-- **Backend**: Oracle Cloud Always Free VM (HTTP via public IP)
-- **CI/CD**: GitHub Actions (automated deployment)
-- **Total Cost**: **$0/month** ✅
-
-### ✅ Completed Preparation
-
-**Infrastructure:**
-- ✅ Dockerized backend with Playwright support
-- ✅ GitHub Actions workflows for automated deployment
-- ✅ Simplified architecture (no Cloudflare, no custom domain, no SSL)
-- ✅ CORS configured for Vercel → Oracle VM connection
-
-**Frontend:**
-- ✅ Vercel deployment configuration
-- ✅ Environment variable setup for API URL
-- ✅ Enhanced homepage with introduction and copyright
-- ✅ Production-ready build configuration
-
-**Backend:**
-- ✅ Docker Compose setup
-- ✅ Health endpoint for monitoring
-- ✅ Automated deployment script
-- ✅ Environment configuration templates
-
-**Documentation:**
-- ✅ **DEPLOYMENT.md** - Simplified step-by-step guide
-- ✅ **GITHUB_ACTIONS_SETUP.md** - Complete CI/CD setup
-- ✅ **QUICKSTART.md** - Local development guide
-- ✅ All configuration examples updated
-
-**CI/CD:**
-- ✅ Backend auto-deployment workflow (`.github/workflows/deploy-backend.yml`)
-- ✅ Frontend auto-deployment workflow (`.github/workflows/deploy-frontend.yml`)
-- ✅ Workflows trigger on push to main branch
-- ✅ Manual trigger option available
-
----
-
-## 🚀 Deployment Steps (1 hour total)
-
-### Step 1: Oracle Cloud VM Setup (~30-40 min)
-- [ ] Create Oracle Cloud account
-- [ ] Create VM instance (AMD or ARM Always Free)
-- [ ] Configure security list (ports 22, 8000)
-- [ ] SSH into VM
-- [ ] Install Docker and Docker Compose
-- [ ] Configure UFW firewall
-- [ ] Clone repository
-- [ ] Create `.env` file with your email
-- [ ] Run `./deploy.sh`
-- [ ] Verify: `curl http://localhost:8000/health`
-- [ ] Note your VM public IP
-
-### Step 2: Vercel Frontend (~10-15 min)
-- [ ] Push code to GitHub
-- [ ] Sign up for Vercel
-- [ ] Import GitHub repository
-- [ ] Set root directory to `frontend/`
-- [ ] Add environment variable:
-  - `NEXT_PUBLIC_API_URL` = `http://YOUR_VM_IP:8000`
-- [ ] Deploy
-- [ ] Note your Vercel URL
-
-### Step 3: Connect Frontend & Backend (~5 min)
-- [ ] SSH to VM
-- [ ] Update `backend/.env`:
-  - Add Vercel URL to `ALLOWED_ORIGINS`
-- [ ] Restart: `docker-compose restart`
-- [ ] Test: Visit Vercel URL and create a trip
-
-### Step 4: GitHub Actions CI/CD (~15-20 min)
-- [ ] Generate SSH key for GitHub Actions
-- [ ] Add public key to Oracle VM
-- [ ] Add 6 GitHub Secrets:
-  - `ORACLE_VM_HOST`
-  - `ORACLE_VM_USER`
-  - `ORACLE_VM_SSH_KEY`
-  - `VERCEL_TOKEN`
-  - `VERCEL_ORG_ID`
-  - `VERCEL_PROJECT_ID`
-- [ ] Test: Push a change and watch auto-deployment
-
-**Detailed instructions:** See `GITHUB_ACTIONS_SETUP.md`
-
----
-
-## 📋 Post-Deployment (Optional)
-
-### Monitoring & Maintenance
-- [ ] Set up UptimeRobot for health monitoring (free)
-- [ ] Create backup script for SQLite database
-- [ ] Set up log rotation on VM
-- [ ] Add error tracking (Sentry free tier)
-
-### Enhancements
-- [ ] Add loading states and error messages
-- [ ] Improve PDF template styling
-- [ ] Add more enrichment sources
-- [ ] Implement geocoding cache optimization
-- [ ] Add user feedback/rating system
-- [ ] Add analytics (Plausible, etc.)
-
----
-
-## 📖 Documentation Quick Reference
-
-| File | Purpose |
-|------|---------|
-| **DEPLOYMENT.md** | Main deployment guide (start here!) |
-| **GITHUB_ACTIONS_SETUP.md** | CI/CD automation setup |
-| **QUICKSTART.md** | Run locally in 5 minutes |
-| **CLAUDE.md** | Project architecture & tech stack |
-| **TODO.md** | This file - current status & next steps |
-
----
+# TODO - Active Development Tasks
 
 ## 🎯 Current Status
 
-**Ready for deployment!** All code is prepared, documented, and tested.
+**Deployment Status**: ✅ **Live in Production**
+- Frontend: Vercel (HTTPS)
+- Backend: Oracle Cloud VM (HTTP via public IP)
+- CI/CD: Automated via GitHub Actions
 
-**What works:**
-- ✅ Full-stack application (Next.js + FastAPI)
-- ✅ PDF generation with maps and enrichment
-- ✅ Dockerized backend
-- ✅ Production-ready configuration
-- ✅ Automated deployment via GitHub Actions
-
-**Next session options:**
-
-1. **Deploy now** - Follow DEPLOYMENT.md step-by-step
-2. **Test locally first** - Follow QUICKSTART.md
-3. **Enhance features** - Improve PDF templates, add more data sources
+**Recent Fixes Completed:**
+- ✅ Mixed content blocking (Next.js API proxy)
+- ✅ Geocoding normalization ("The Louvre Museum" → "Louvre")
+- ✅ Wikipedia enrichment fallback strategy
+- ✅ Overview map shows start/end locations
 
 ---
 
-## 🌐 After Deployment
+## 🚀 Phase 7: UX Improvements (In Progress)
 
-Your app will be accessible at:
-- **Frontend**: `https://your-app.vercel.app` (HTTPS via Vercel)
-- **Backend API**: `http://YOUR_VM_IP:8000` (HTTP, public IP)
-- **API Docs**: `http://YOUR_VM_IP:8000/docs` (Swagger UI)
+### Priority 1: Real-time Geocoding Preview (In Progress)
 
-**Deployment is automatic:**
-- Push backend changes → Auto-deploys to Oracle VM
-- Push frontend changes → Auto-deploys to Vercel
-- No manual SSH or deployment commands needed!
+**Problem:** Users can't verify geocoding accuracy before PDF generation
+- "Mt. Britton Tower" → Queensland, Australia ✗ (should be Puerto Rico ✓)
+- No feedback until PDF is downloaded (too late to fix)
+
+**Solution:** Add live location preview as user types
+
+**Backend Tasks:**
+- [ ] Create geocoding preview endpoint `GET /api/geocode/preview`
+  - Accept query parameter `?q={query}&limit=10`
+  - Return up to 10 Nominatim results
+  - Include display_name, lat, lon, type, importance
+  - Add response caching to prevent rate limiting
+  - File: `backend/app/routers/geocode.py` (new)
+  - File: `backend/app/services/geocoding.py` (add `geocode_preview()`)
+
+- [ ] Register geocode router in main app
+  - File: `backend/app/main.py`
+
+**Frontend Tasks:**
+- [ ] Create LocationPreview component
+  - Debounced input (1 second delay)
+  - Show loading spinner while fetching
+  - Display up to 5 results at a time
+  - "Show 5 more" button if >5 results
+  - Click result to select (or dismiss)
+  - Show "❌ No locations found" if empty
+  - File: `frontend/src/components/LocationPreview.tsx` (new)
+
+- [ ] Integrate LocationPreview into forms
+  - Start location input
+  - End location input
+  - All place name inputs
+  - File: `frontend/src/components/DaySection.tsx`
+
+- [ ] Add geocodePreview API function
+  - File: `frontend/src/lib/api.ts`
+
+- [ ] Add proxy endpoint for geocoding preview
+  - File: `frontend/src/app/api/geocode/preview/route.ts` (new)
+
+**UI Design:**
+```
+[Input: mt. britton tower                    ]
+
+📍 Preview locations:
+┌─────────────────────────────────────────────┐
+│ ✓ Mt Britton Tower, El Yunque, Puerto Rico │ [Select]
+│   Mt Britton, Queensland, Australia        │ [Select]
+├─────────────────────────────────────────────┤
+│ Showing 2 of 2 results                      │
+└─────────────────────────────────────────────┘
+```
+
+**Estimated Time:** 2-3 hours
 
 ---
 
-**Status**: ✅ **Ready to deploy!**
-**Cost**: 💰 **$0/month**
-**Time**: ⏱️ **~1 hour one-time setup**
+### Priority 2: Improve Description Quality
+
+**Problem:** Keyword-based summaries are poor quality, hard to read
+
+**Solution:** Revert to full sentence extraction with optimized word limit
+
+**Implementation:**
+- [ ] Calculate optimal word count based on page layout
+  - Page layout: Top 20% map, 73% for 5 POI cards
+  - Per POI: ~39mm height, ~11mm for description
+  - Font: 11px, line-height 1.4
+  - Target: ~50 words (fits 2.5 lines)
+
+- [ ] Replace `_summarize_to_keywords()` with `_extract_sentences()`
+  - Extract first complete sentences
+  - Truncate at ~50 words
+  - Preserve sentence structure
+  - File: `backend/app/services/enrichment.py`
+
+- [ ] Update template CSS if needed
+  - File: `backend/app/templates/travelbook.html`
+
+**Estimated Time:** 30 minutes
+
+---
+
+### Priority 3: Remove POI Limit Per Day
+
+**Problem:** Artificial 5 POI limit prevents comprehensive itineraries
+
+**Solution:** Allow unlimited POIs, let days span multiple pages
+
+**Implementation:**
+- [ ] Update template CSS for multi-page days
+  - Add `page-break-inside: avoid` to POI cards
+  - Allow natural page breaks between cards
+  - File: `backend/app/templates/travelbook.html`
+
+- [ ] Remove frontend limit validation
+  - Allow unlimited "Add Place" clicks
+  - Add soft warning at 10+ POIs: "⚠️ You have 12 places. This day may span 2-3 pages in the PDF."
+  - File: `frontend/src/components/DaySection.tsx`
+
+**Estimated Time:** 30 minutes
+
+---
+
+## 📊 Progress Tracker
+
+| Phase | Status | Files Changed | Time |
+|-------|--------|---------------|------|
+| Geocoding Preview | 🔄 In Progress | 6 files (3 new, 3 modified) | 2-3h |
+| Description Quality | ⏳ Pending | 2 files | 30min |
+| Remove POI Limit | ⏳ Pending | 2 files | 30min |
+
+**Total Estimated Time:** 3-4 hours
+
+---
+
+## 🔄 Implementation Order
+
+1. **Start**: Geocoding preview (most impactful UX improvement)
+2. **Then**: Description quality (quick win)
+3. **Finally**: Remove POI limit (nice to have)
+
+---
+
+## 📝 Session Notes
+
+**Current Session (2026-02-15):**
+- Completed deployment fixes (mixed content, geocoding, enrichment)
+- User tested with Paris itinerary - works ✅
+- User tested with Puerto Rico - geocoding accuracy issue identified
+- Plan approved for 3 UX improvements
+- Starting Phase 7: Geocoding Preview
+
+---
+
+## 📖 Documentation
+
+See `DEBUG_NOTES.md` for detailed troubleshooting history and solutions.

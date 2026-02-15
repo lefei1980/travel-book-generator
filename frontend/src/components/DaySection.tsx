@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { DayInput, PlaceInput } from "@/lib/api";
+import { DayInput, PlaceInput, GeocodeResult } from "@/lib/api";
+import LocationPreview from "./LocationPreview";
 
 interface DaySectionProps {
   day: DayInput;
@@ -10,10 +11,14 @@ interface DaySectionProps {
 }
 
 const PLACE_TYPES = ["attraction", "restaurant", "hotel"] as const;
+const SOFT_LIMIT_WARNING = 10;
 
 export default function DaySection({ day, onChange, onRemove }: DaySectionProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [showStartPreview, setShowStartPreview] = useState(false);
+  const [showEndPreview, setShowEndPreview] = useState(false);
+  const [showPlacePreview, setShowPlacePreview] = useState<number | null>(null);
 
   const updatePlace = (index: number, field: keyof PlaceInput, value: string) => {
     const newPlaces = [...day.places];
@@ -22,11 +27,21 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
   };
 
   const addPlace = () => {
-    if (day.places.length >= 5) return;
     onChange({
       ...day,
       places: [...day.places, { name: "", place_type: "attraction" }],
     });
+  };
+
+  const handleSelectLocation = (field: "start_location" | "end_location", result: GeocodeResult) => {
+    onChange({ ...day, [field]: result.display_name });
+    if (field === "start_location") setShowStartPreview(false);
+    if (field === "end_location") setShowEndPreview(false);
+  };
+
+  const handleSelectPlace = (index: number, result: GeocodeResult) => {
+    updatePlace(index, "name", result.display_name);
+    setShowPlacePreview(null);
   };
 
   const removePlace = (index: number) => {
@@ -84,9 +99,17 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
             type="text"
             value={day.start_location}
             onChange={(e) => onChange({ ...day, start_location: e.target.value })}
+            onFocus={() => setShowStartPreview(true)}
+            onBlur={() => setTimeout(() => setShowStartPreview(false), 200)}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
             placeholder="e.g., Hotel name or airport"
           />
+          {showStartPreview && day.start_location && (
+            <LocationPreview
+              query={day.start_location}
+              onSelect={(result) => handleSelectLocation("start_location", result)}
+            />
+          )}
         </div>
         <div>
           <label className="block text-sm text-gray-600 mb-1">End Location</label>
@@ -94,70 +117,91 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
             type="text"
             value={day.end_location}
             onChange={(e) => onChange({ ...day, end_location: e.target.value })}
+            onFocus={() => setShowEndPreview(true)}
+            onBlur={() => setTimeout(() => setShowEndPreview(false), 200)}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
             placeholder="e.g., Hotel name"
           />
+          {showEndPreview && day.end_location && (
+            <LocationPreview
+              query={day.end_location}
+              onSelect={(result) => handleSelectLocation("end_location", result)}
+            />
+          )}
         </div>
       </div>
 
       <div className="mb-2">
         <label className="block text-sm text-gray-600 mb-1">
-          Places ({day.places.length}/5) <span className="text-gray-400">— drag to reorder</span>
+          Places ({day.places.length}) <span className="text-gray-400">— drag to reorder</span>
         </label>
+        {day.places.length >= SOFT_LIMIT_WARNING && (
+          <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+            ⚠️ You have {day.places.length} places. This day may span {Math.ceil(day.places.length / 5)} pages in the PDF.
+          </div>
+        )}
         {day.places.map((place, idx) => (
-          <div
-            key={idx}
-            draggable
-            onDragStart={() => handleDragStart(idx)}
-            onDragOver={(e) => handleDragOver(e, idx)}
-            onDrop={() => handleDrop(idx)}
-            onDragEnd={handleDragEnd}
-            className={`flex gap-2 mb-2 items-center transition-all ${
-              dragIndex === idx ? "opacity-40" : ""
-            } ${dragOverIndex === idx && dragIndex !== idx ? "border-t-2 border-blue-400" : ""}`}
-          >
-            <span
-              className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none px-1"
-              title="Drag to reorder"
+          <div key={idx} className="mb-2">
+            <div
+              draggable
+              onDragStart={() => handleDragStart(idx)}
+              onDragOver={(e) => handleDragOver(e, idx)}
+              onDrop={() => handleDrop(idx)}
+              onDragEnd={handleDragEnd}
+              className={`flex gap-2 items-center transition-all ${
+                dragIndex === idx ? "opacity-40" : ""
+              } ${dragOverIndex === idx && dragIndex !== idx ? "border-t-2 border-blue-400" : ""}`}
             >
-              ⠿
-            </span>
-            <input
-              type="text"
-              value={place.name}
-              onChange={(e) => updatePlace(idx, "name", e.target.value)}
-              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              placeholder="Place name"
-            />
-            <select
-              value={place.place_type}
-              onChange={(e) => updatePlace(idx, "place_type", e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-            >
-              {PLACE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => removePlace(idx)}
-              className="text-red-400 hover:text-red-600 px-2"
-            >
-              X
-            </button>
+              <span
+                className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none px-1"
+                title="Drag to reorder"
+              >
+                ⠿
+              </span>
+              <input
+                type="text"
+                value={place.name}
+                onChange={(e) => updatePlace(idx, "name", e.target.value)}
+                onFocus={() => setShowPlacePreview(idx)}
+                onBlur={() => setTimeout(() => setShowPlacePreview(null), 200)}
+                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+                placeholder="Place name"
+              />
+              <select
+                value={place.place_type}
+                onChange={(e) => updatePlace(idx, "place_type", e.target.value)}
+                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+              >
+                {PLACE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => removePlace(idx)}
+                className="text-red-400 hover:text-red-600 px-2"
+              >
+                X
+              </button>
+            </div>
+            {showPlacePreview === idx && place.name && (
+              <LocationPreview
+                query={place.name}
+                onSelect={(result) => handleSelectPlace(idx, result)}
+                className="ml-6"
+              />
+            )}
           </div>
         ))}
-        {day.places.length < 5 && (
-          <button
-            type="button"
-            onClick={addPlace}
-            className="text-blue-600 hover:text-blue-800 text-sm"
-          >
-            + Add Place
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={addPlace}
+          className="text-blue-600 hover:text-blue-800 text-sm"
+        >
+          + Add Place
+        </button>
       </div>
     </div>
   );
