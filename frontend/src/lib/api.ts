@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Use relative URLs to hit Next.js API routes (which proxy to backend)
+// This solves mixed content blocking (HTTPS frontend → HTTP backend)
+const API_BASE = "";
 
 export interface PlaceInput {
   name: string;
