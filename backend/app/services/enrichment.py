@@ -33,7 +33,7 @@ def _normalize_place_name(name: str) -> str:
 WIKIPEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
 WIKIMEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
 USER_AGENT = "TravelBookGenerator/1.0 (travelbook@example.com)"
-MAX_DESCRIPTION_WORDS = 30  # Reduced for keyword-based summaries
+MAX_DESCRIPTION_WORDS = 50  # Optimized for 2.5 lines at 11px font
 
 
 def _extract_native_name(text: str) -> tuple[str | None, str]:
@@ -56,43 +56,44 @@ def _extract_native_name(text: str) -> tuple[str | None, str]:
     return (None, text)
 
 
-def _summarize_to_keywords(text: str, max_words: int = 30) -> str:
-    """Convert to keyword-based summary - extract only key facts."""
-    # Take only first 1-2 sentences (most important info)
-    sentences = re.split(r'[.!?]+', text)
-    if sentences:
-        text = '. '.join(sentences[:2]) + '.'
+def _extract_sentences(text: str, max_words: int = 50) -> str:
+    """Extract first complete sentences up to max_words for readable descriptions.
 
-    # Remove pronunciation guides and parenthetical info
-    text = re.sub(r'\([^)]*\)', '', text)
-    text = re.sub(r'\[[^\]]*\]', '', text)
+    Preserves sentence structure for better readability compared to keyword extraction.
+    Optimized for PDF layout: ~50 words fits 2.5 lines at 11px font.
+    """
+    # Remove citations and parentheticals
+    text = re.sub(r'\[[^\]]+\]', '', text)
+    text = re.sub(r'\([^)]+\)', '', text)
+    text = text.strip()
 
-    # Aggressively remove filler words
-    filler_patterns = [
-        r'\b(is|are|was|were|has|have|had|been|being|be)\s+',
-        r'\b(a|an|the)\s+',
-        r'\b(very|quite|rather|somewhat|also|however|therefore)\s+',
-        r'\b(it|this|that|these|those)\s+',
-        r'\b(of|for|to|in|on|at|by|with)\s+',
-        r'\bwhich\s+',
-        r'\band\s+',
-    ]
+    # Split into sentences
+    sentences = re.split(r'(?<=[.!?])\s+', text)
 
-    cleaned = text
-    for pattern in filler_patterns:
-        cleaned = re.sub(pattern, ' ', cleaned, flags=re.IGNORECASE)
+    result = []
+    word_count = 0
 
-    # Remove extra whitespace and punctuation
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    cleaned = re.sub(r'\s*[,;]\s*', ' • ', cleaned)  # Convert to bullets
-    cleaned = cleaned.strip()
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
 
-    # Limit to max words
-    words = cleaned.split()
-    if len(words) > max_words:
-        cleaned = ' • '.join([' '.join(words[i:i+10]) for i in range(0, min(len(words), max_words), 10)])
+        words = sentence.split()
+        sentence_word_count = len(words)
 
-    return cleaned
+        # If adding this sentence keeps us under or at the limit, add it
+        if word_count + sentence_word_count <= max_words:
+            result.append(sentence)
+            word_count += sentence_word_count
+        else:
+            # If we have less than 70% of target words, add partial sentence
+            if word_count < max_words * 0.7:
+                remaining_words = max_words - word_count
+                partial = ' '.join(words[:remaining_words]) + '...'
+                result.append(partial)
+            break
+
+    return ' '.join(result) if result else text[:max_words * 6] + '...'
 
 
 def _truncate_to_words(text: str, max_words: int) -> str:
@@ -161,8 +162,8 @@ def _fetch_extract(title: str, client: httpx.Client) -> dict | None:
         # Extract native name and clean text
         native_name, cleaned_extract = _extract_native_name(extract)
 
-        # Summarize to keywords
-        summary = _summarize_to_keywords(cleaned_extract, MAX_DESCRIPTION_WORDS)
+        # Extract complete sentences for readable descriptions
+        summary = _extract_sentences(cleaned_extract, MAX_DESCRIPTION_WORDS)
 
         return {
             "description": summary,
