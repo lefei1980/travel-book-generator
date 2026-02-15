@@ -12,7 +12,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="TravelBook Generator", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="TravelBook Generator", version="0.1.1", lifespan=lifespan)
 
 # Configure CORS - allow frontend origins
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
