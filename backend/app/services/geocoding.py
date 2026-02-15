@@ -154,6 +154,31 @@ def geocode_place(name: str, db: Session, client: httpx.Client | None = None) ->
     return (lat, lon, display_name)
 
 
+def _normalize_place_name(name: str) -> str:
+    """Normalize place name for better geocoding results.
+    Strips common prefixes/suffixes that might confuse geocoding."""
+    normalized = name.strip()
+
+    # Remove leading "the" (case insensitive)
+    if normalized.lower().startswith("the "):
+        normalized = normalized[4:]
+
+    # Common word replacements for better matching
+    # Keep these minimal to avoid over-normalization
+    replacements = {
+        " museum": "",  # "Louvre Museum" -> "Louvre"
+        " tower": "",   # "Eiffel Tower" -> "Eiffel"
+    }
+
+    normalized_lower = normalized.lower()
+    for old, new in replacements.items():
+        if normalized_lower.endswith(old):
+            normalized = normalized[:len(normalized) - len(old)] + new
+            break
+
+    return normalized.strip()
+
+
 def _extract_city_context(location: str | None) -> str | None:
     """Extract city/country context from a location string.
     E.g., 'Charles de Gaulle Airport, Paris' -> 'Paris'
@@ -192,15 +217,30 @@ def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
 
             # Geocode each place with city context
             for place in day.places:
-                # Add city context to improve geocoding accuracy
-                query = place.name
-                if city_context and city_context.lower() not in place.name.lower():
-                    query = f"{place.name}, {city_context}"
+                # Try multiple query variations for better success rate
+                normalized_name = _normalize_place_name(place.name)
 
-                logger.info(f"Geocoding place '{place.name}' with query: '{query}' (context: '{city_context}')")
-                result = geocode_place(query, db, client)
-                if result:
-                    place.latitude, place.longitude = result[0], result[1]
+                queries = []
+                # Try normalized name with city context first
+                if city_context and city_context.lower() not in normalized_name.lower():
+                    queries.append(f"{normalized_name}, {city_context}")
+                # Fallback to normalized name alone
+                queries.append(normalized_name)
+                # Last resort: original name with city context
+                if city_context and city_context.lower() not in place.name.lower():
+                    queries.append(f"{place.name}, {city_context}")
+
+                result = None
+                for query in queries:
+                    logger.info(f"Geocoding place '{place.name}' with query: '{query}'")
+                    result = geocode_place(query, db, client)
+                    if result:
+                        place.latitude, place.longitude = result[0], result[1]
+                        logger.info(f"✓ Successfully geocoded '{place.name}' using query '{query}'")
+                        break
+
+                if not result:
+                    logger.warning(f"✗ Failed to geocode '{place.name}' after trying {len(queries)} queries")
 
             db.commit()
     finally:

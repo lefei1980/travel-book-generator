@@ -385,7 +385,21 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
   var bounds = [];
   var allCoords = [];
 
+  // Collect all places AND start/end locations
   {% for day in days %}
+  // Add start location
+  {% if day.start_coords %}
+  allCoords.push({
+    lat: {{ day.start_coords.lat }},
+    lng: {{ day.start_coords.lng }},
+    name: '{{ day.start_coords.name }}',
+    type: 'start',
+    day: {{ day.day_number }}
+  });
+  bounds.push([{{ day.start_coords.lat }}, {{ day.start_coords.lng }}]);
+  {% endif %}
+
+  // Add places (attractions/restaurants/hotels)
   {% for place in day.places %}
   {% if place.latitude and place.longitude %}
   allCoords.push({
@@ -398,6 +412,18 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
   bounds.push([{{ place.latitude }}, {{ place.longitude }}]);
   {% endif %}
   {% endfor %}
+
+  // Add end location
+  {% if day.end_coords %}
+  allCoords.push({
+    lat: {{ day.end_coords.lat }},
+    lng: {{ day.end_coords.lng }},
+    name: '{{ day.end_coords.name }}',
+    type: 'end',
+    day: {{ day.day_number }}
+  });
+  bounds.push([{{ day.end_coords.lat }}, {{ day.end_coords.lng }}]);
+  {% endif %}
   {% endfor %}
 
   // Add day-colored markers (no duplicates)
@@ -407,9 +433,22 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
     if (!seen[key]) {
       seen[key] = true;
       var dayColor = dayColors[(c.day - 1) % dayColors.length];
-      L.marker([c.lat, c.lng], {
-        icon: makeIcon(dayColor)
-      }).addTo(map).bindPopup('<b>Day ' + c.day + ':</b> ' + c.name);
+      var icon;
+      var label;
+
+      // Use different icons for start/end vs regular places
+      if (c.type === 'start') {
+        icon = makeStartIcon();
+        label = '<b>START (Day ' + c.day + '):</b> ' + c.name;
+      } else if (c.type === 'end') {
+        icon = makeEndIcon();
+        label = '<b>END (Day ' + c.day + '):</b> ' + c.name;
+      } else {
+        icon = makeIcon(dayColor);
+        label = '<b>Day ' + c.day + ':</b> ' + c.name;
+      }
+
+      L.marker([c.lat, c.lng], { icon: icon }).addTo(map).bindPopup(label);
     }
   });
 

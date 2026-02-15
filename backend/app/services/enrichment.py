@@ -6,6 +6,30 @@ from app.models import Trip
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_place_name(name: str) -> str:
+    """Normalize place name for better Wikipedia search results.
+    Strips common prefixes/suffixes that might confuse search."""
+    normalized = name.strip()
+
+    # Remove leading "the" (case insensitive)
+    if normalized.lower().startswith("the "):
+        normalized = normalized[4:]
+
+    # Common word replacements for better matching
+    replacements = {
+        " museum": "",  # "Louvre Museum" -> "Louvre"
+        " tower": "",   # "Eiffel Tower" -> "Eiffel"
+    }
+
+    normalized_lower = normalized.lower()
+    for old, new in replacements.items():
+        if normalized_lower.endswith(old):
+            normalized = normalized[:len(normalized) - len(old)] + new
+            break
+
+    return normalized.strip()
+
 WIKIPEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
 WIKIMEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
 USER_AGENT = "TravelBookGenerator/1.0 (travelbook@example.com)"
@@ -150,8 +174,7 @@ def _fetch_extract(title: str, client: httpx.Client) -> dict | None:
 
 def get_wikipedia_summary(place_name: str, client: httpx.Client | None = None) -> dict | None:
     """Query Wikipedia API for a place summary.
-    First tries exact title match (with redirects). If that fails, falls back
-    to Wikipedia's search API to handle typos and vague names.
+    Tries multiple query variations for better success rate.
     Returns dict with 'description' and 'wikipedia_url', or None if not found."""
     should_close = False
     if client is None:
@@ -159,20 +182,28 @@ def get_wikipedia_summary(place_name: str, client: httpx.Client | None = None) -
         should_close = True
 
     try:
-        # Try exact title match first
-        result = _fetch_extract(place_name, client)
-        if result:
-            return result
+        # Try multiple query variations
+        normalized_name = _normalize_place_name(place_name)
+        queries = [place_name]  # Original first
+        if normalized_name != place_name:
+            queries.append(normalized_name)  # Normalized second
 
-        # Fallback: search for best matching title
-        logger.info(f"Exact match failed for '{place_name}', trying search fallback")
-        search_title = _search_wikipedia_title(place_name, client)
-        if search_title and search_title != place_name:
-            result = _fetch_extract(search_title, client)
+        for query in queries:
+            # Try exact title match
+            result = _fetch_extract(query, client)
             if result:
+                logger.info(f"✓ Wikipedia found for '{place_name}' using query '{query}'")
                 return result
 
-        logger.warning(f"No Wikipedia page for '{place_name}'")
+            # Fallback: search for best matching title
+            search_title = _search_wikipedia_title(query, client)
+            if search_title and search_title != query:
+                result = _fetch_extract(search_title, client)
+                if result:
+                    logger.info(f"✓ Wikipedia found for '{place_name}' via search '{query}' → '{search_title}'")
+                    return result
+
+        logger.warning(f"✗ No Wikipedia page for '{place_name}' after trying {len(queries)} queries")
         return None
     finally:
         if should_close:
@@ -219,7 +250,7 @@ def _fetch_page_image(title: str, client: httpx.Client) -> dict | None:
 
 def get_wikimedia_image(place_name: str, client: httpx.Client | None = None) -> dict | None:
     """Fetch a Wikimedia Commons thumbnail URL + license for a place.
-    Tries exact title first, then falls back to search API.
+    Tries multiple query variations for better success rate.
     Returns dict with 'image_url' and 'image_attribution', or None."""
     should_close = False
     if client is None:
@@ -227,14 +258,24 @@ def get_wikimedia_image(place_name: str, client: httpx.Client | None = None) -> 
         should_close = True
 
     try:
-        result = _fetch_page_image(place_name, client)
-        if result:
-            return result
+        # Try multiple query variations
+        normalized_name = _normalize_place_name(place_name)
+        queries = [place_name]  # Original first
+        if normalized_name != place_name:
+            queries.append(normalized_name)  # Normalized second
 
-        # Fallback: search for best matching title
-        search_title = _search_wikipedia_title(place_name, client)
-        if search_title and search_title != place_name:
-            return _fetch_page_image(search_title, client)
+        for query in queries:
+            # Try exact title
+            result = _fetch_page_image(query, client)
+            if result:
+                return result
+
+            # Fallback: search for best matching title
+            search_title = _search_wikipedia_title(query, client)
+            if search_title and search_title != query:
+                result = _fetch_page_image(search_title, client)
+                if result:
+                    return result
 
         return None
     finally:
