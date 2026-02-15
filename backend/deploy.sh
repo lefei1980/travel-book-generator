@@ -41,6 +41,10 @@ if [ -d .git ]; then
     git pull
 fi
 
+# Stop and remove old containers
+echo "🛑 Stopping old containers..."
+docker-compose down
+
 # Build and start containers
 echo "🏗️  Building Docker image..."
 docker-compose build
