@@ -81,8 +81,11 @@
     font-size: 13px;
   }
 
-  /* Day Section - compact for single page */
-  .day-section { page-break-before: always; margin-bottom: 20px; }
+  /* Day Section - allows multi-page if >5 POIs */
+  .day-section {
+    page-break-before: always;
+    margin-bottom: 20px;
+  }
   .day-header {
     display: flex;
     align-items: baseline;
@@ -142,6 +145,7 @@
     border-radius: 6px;
     background: #fdfcfa;
     position: relative;
+    page-break-inside: avoid; /* Keep POI cards intact across pages */
   }
   .poi-number {
     position: absolute;
