@@ -77,6 +77,37 @@ export function getDownloadUrl(id: string): string {
   return `${API_BASE}/api/trips/${id}/download`;
 }
 
+export function getPreviewUrl(id: string): string {
+  return `${API_BASE}/api/trips/${id}/preview`;
+}
+
+export async function updateTrip(
+  id: string,
+  data: TripCreateRequest
+): Promise<TripCreateResponse> {
+  const res = await fetch(`${API_BASE}/api/trips/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || "Failed to update trip");
+  }
+  return res.json();
+}
+
+export async function generatePDF(id: string): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_BASE}/api/trips/${id}/generate-pdf`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || "Failed to generate PDF");
+  }
+  return res.json();
+}
+
 export interface GeocodeResult {
   display_name: string;
   lat: number;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createTrip, getTrip, getDownloadUrl, DayInput, TripCreateRequest } from "@/lib/api";
+import { createTrip, updateTrip, getTrip, getDownloadUrl, getPreviewUrl, generatePDF, DayInput, TripCreateRequest } from "@/lib/api";
 import DaySection from "./DaySection";
 
 const STATUS_MESSAGES: Record<string, string> = {
@@ -9,7 +9,9 @@ const STATUS_MESSAGES: Record<string, string> = {
   geocoding: "Geocoding locations...",
   routing: "Calculating routes...",
   enriching: "Fetching images and descriptions...",
-  rendering: "Rendering your PDF...",
+  rendering: "Generating preview...",
+  preview_ready: "Preview ready!",
+  generating_pdf: "Generating PDF...",
   complete: "Your travel guide is ready!",
   error: "Something went wrong.",
 };
@@ -23,6 +25,8 @@ const EMPTY_DAY = (dayNumber: number): DayInput => ({
 
 const STORAGE_KEY = "travelbook_draft";
 
+type ViewMode = 'form' | 'status' | 'preview';
+
 export default function TripForm() {
   const [title, setTitle] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -31,6 +35,8 @@ export default function TripForm() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('form');
+  const [generatingPDF, setGeneratingPDF] = useState(false);
 
   // Auto-calculate end date from start date + number of days
   const endDate = startDate && days.length > 0
@@ -71,14 +77,20 @@ export default function TripForm() {
       if (trip.status === "error") {
         setError(trip.error_message || "Pipeline failed");
         setSubmitting(false);
+        setViewMode('status');
+      } else if (trip.status === "preview_ready") {
+        setSubmitting(false);
+        setViewMode('preview');
       } else if (trip.status === "complete") {
         setSubmitting(false);
+        setViewMode('status');
       } else {
         setTimeout(() => pollStatus(id), 2000);
       }
     } catch {
       setError("Failed to check trip status");
       setSubmitting(false);
+      setViewMode('status');
     }
   }, []);
 
@@ -86,6 +98,7 @@ export default function TripForm() {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
+    setViewMode('status');
 
     // Filter out empty places and empty days
     const cleanDays = days
@@ -98,6 +111,7 @@ export default function TripForm() {
     if (!cleanDays.length) {
       setError("Add at least one day with at least one place");
       setSubmitting(false);
+      setViewMode('form');
       return;
     }
 
@@ -109,14 +123,62 @@ export default function TripForm() {
     };
 
     try {
-      const result = await createTrip(request);
-      setTripId(result.id);
+      let result;
+      if (tripId) {
+        // Update existing trip (editing from preview)
+        result = await updateTrip(tripId, request);
+      } else {
+        // Create new trip
+        result = await createTrip(request);
+        setTripId(result.id);
+      }
       setStatus(result.status);
       localStorage.removeItem(STORAGE_KEY);
       pollStatus(result.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create trip");
       setSubmitting(false);
+      setViewMode('form');
+    }
+  };
+
+  const handleEdit = () => {
+    setViewMode('form');
+    setError(null);
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!tripId) return;
+
+    setGeneratingPDF(true);
+    setError(null);
+
+    try {
+      await generatePDF(tripId);
+      setStatus("generating_pdf");
+      // Poll until PDF is ready
+      const checkPDF = async () => {
+        try {
+          const trip = await getTrip(tripId);
+          if (trip.status === "complete") {
+            setStatus("complete");
+            setGeneratingPDF(false);
+            setViewMode('status');
+          } else if (trip.status === "error") {
+            setError(trip.error_message || "PDF generation failed");
+            setGeneratingPDF(false);
+          } else {
+            setTimeout(checkPDF, 2000);
+          }
+        } catch {
+          setError("Failed to check PDF status");
+          setGeneratingPDF(false);
+        }
+      };
+      checkPDF();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate PDF");
+      setGeneratingPDF(false);
     }
   };
 
@@ -147,8 +209,52 @@ export default function TripForm() {
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  // Status view
-  if (tripId && status) {
+  // Preview view
+  if (viewMode === 'preview' && tripId && status === "preview_ready") {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-6xl mx-auto p-6">
+          <div className="bg-white rounded-lg shadow mb-4 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+                <p className="text-sm text-gray-600">Preview your travel guide before generating PDF</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleEdit}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  ← Edit Trip
+                </button>
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={generatingPDF}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
+                >
+                  {generatingPDF ? "Generating PDF..." : "Download PDF"}
+                </button>
+              </div>
+            </div>
+            {error && (
+              <div className="mt-3 bg-red-50 text-red-700 p-3 rounded">{error}</div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg shadow overflow-hidden" style={{ height: 'calc(100vh - 200px)' }}>
+            <iframe
+              src={getPreviewUrl(tripId)}
+              className="w-full h-full border-0"
+              title="Trip Preview"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Status view (processing or complete)
+  if (viewMode === 'status' && tripId && status) {
     return (
       <div className="max-w-2xl mx-auto p-6">
         <div className="bg-white rounded-lg shadow p-8 text-center">
@@ -156,7 +262,7 @@ export default function TripForm() {
 
           <div className="mb-6">
             <p className="text-lg text-gray-600">{STATUS_MESSAGES[status] || status}</p>
-            {status !== "complete" && status !== "error" && (
+            {!["complete", "error", "preview_ready"].includes(status) && (
               <div className="mt-4">
                 <div className="animate-spin inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
               </div>
