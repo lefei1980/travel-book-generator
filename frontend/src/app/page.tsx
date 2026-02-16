@@ -10,7 +10,7 @@ export default function Home() {
             Transform your travel itinerary into a professionally formatted, map-rich PDF travel guide.
             Simply enter your trip details, destinations, and points of interest — we'll geocode locations,
             calculate routes, enrich each place with descriptions and images from Wikipedia, and render
-            everything into a downloadable PDF with embedded interactive maps.
+            everything into a downloadable PDF with embedded maps and route visualizations.
           </p>
           <p className="text-sm text-gray-400 mb-2">
             This tool uses free public APIs (Nominatim for geocoding, OSRM for routing, Wikipedia and

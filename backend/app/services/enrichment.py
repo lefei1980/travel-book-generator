@@ -105,6 +105,44 @@ def _truncate_to_words(text: str, max_words: int) -> str:
     return " ".join(words[:max_words]) + "..."
 
 
+def _is_disambiguation_page(text: str) -> bool:
+    """Check if Wikipedia extract is from a disambiguation page."""
+    disambiguation_indicators = [
+        "may refer to:",
+        "may also refer to:",
+        "can refer to:",
+        "may stand for:",
+    ]
+    text_lower = text.lower()[:200]  # Check first 200 chars
+    return any(indicator in text_lower for indicator in disambiguation_indicators)
+
+
+def _search_wikipedia_by_coordinates(lat: float, lon: float, client: httpx.Client) -> str | None:
+    """Use Wikipedia's geosearch API to find articles near specific coordinates.
+    This helps avoid disambiguation pages by finding the most relevant local article."""
+    try:
+        response = client.get(
+            WIKIPEDIA_API_URL,
+            params={
+                "action": "query",
+                "list": "geosearch",
+                "gscoord": f"{lat}|{lon}",
+                "gsradius": 1000,  # Search within 1km radius
+                "gslimit": 1,
+                "format": "json",
+            },
+            headers={"User-Agent": USER_AGENT},
+        )
+        response.raise_for_status()
+        data = response.json()
+        results = data.get("query", {}).get("geosearch", [])
+        if results:
+            return results[0].get("title")
+    except Exception as e:
+        logger.error(f"Wikipedia geosearch failed for ({lat}, {lon}): {e}")
+    return None
+
+
 def _search_wikipedia_title(place_name: str, client: httpx.Client) -> str | None:
     """Use Wikipedia's search API to find the best matching article title.
     Handles typos, vague names, and alternate spellings."""
@@ -174,9 +212,10 @@ def _fetch_extract(title: str, client: httpx.Client) -> dict | None:
     return None
 
 
-def get_wikipedia_summary(place_name: str, client: httpx.Client | None = None) -> dict | None:
+def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float | None = None, client: httpx.Client | None = None) -> dict | None:
     """Query Wikipedia API for a place summary.
     Tries multiple query variations for better success rate.
+    Uses coordinates (if provided) to avoid disambiguation pages.
     Returns dict with 'description' and 'wikipedia_url', or None if not found."""
     should_close = False
     if client is None:
@@ -184,6 +223,15 @@ def get_wikipedia_summary(place_name: str, client: httpx.Client | None = None) -
         should_close = True
 
     try:
+        # Try geosearch first if we have coordinates
+        if lat is not None and lon is not None:
+            geo_title = _search_wikipedia_by_coordinates(lat, lon, client)
+            if geo_title:
+                result = _fetch_extract(geo_title, client)
+                if result and not _is_disambiguation_page(result["description"]):
+                    logger.info(f"✓ Wikipedia found for '{place_name}' via geosearch → '{geo_title}'")
+                    return result
+
         # Try multiple query variations
         normalized_name = _normalize_place_name(place_name)
         queries = [place_name]  # Original first
@@ -193,7 +241,7 @@ def get_wikipedia_summary(place_name: str, client: httpx.Client | None = None) -
         for query in queries:
             # Try exact title match
             result = _fetch_extract(query, client)
-            if result:
+            if result and not _is_disambiguation_page(result["description"]):
                 logger.info(f"✓ Wikipedia found for '{place_name}' using query '{query}'")
                 return result
 
@@ -201,7 +249,7 @@ def get_wikipedia_summary(place_name: str, client: httpx.Client | None = None) -
             search_title = _search_wikipedia_title(query, client)
             if search_title and search_title != query:
                 result = _fetch_extract(search_title, client)
-                if result:
+                if result and not _is_disambiguation_page(result["description"]):
                     logger.info(f"✓ Wikipedia found for '{place_name}' via search '{query}' → '{search_title}'")
                     return result
 
@@ -342,7 +390,13 @@ def enrich_trip(db: Session, trip: Trip, client: httpx.Client | None = None) -> 
                 }
 
                 # Try Wikipedia first (best quality)
-                wiki = get_wikipedia_summary(place.name, client)
+                # Pass coordinates to avoid disambiguation pages
+                wiki = get_wikipedia_summary(
+                    place.name,
+                    lat=place.latitude,
+                    lon=place.longitude,
+                    client=client
+                )
                 if wiki:
                     place_info["description"] = wiki["description"]
                     place_info["native_name"] = wiki.get("native_name")
