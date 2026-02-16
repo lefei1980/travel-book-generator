@@ -1,12 +1,48 @@
 import logging
 import re
 import math
+import time
 import httpx
 from sqlalchemy.orm import Session
 from app.models import Trip
 from app.services.geocoding import get_place_metadata
 
 logger = logging.getLogger(__name__)
+
+# Wikipedia API rate limiting
+WIKIPEDIA_REQUEST_DELAY = 0.4  # seconds between requests to avoid 429 errors
+MAX_RETRIES = 3
+RETRY_DELAYS = [1, 2, 4]  # exponential backoff delays in seconds
+
+
+def _wikipedia_api_call(client: httpx.Client, url: str, params: dict, headers: dict) -> httpx.Response:
+    """Make a Wikipedia API call with rate limiting and retry logic for 429 errors."""
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.get(url, params=params, headers=headers)
+
+            # Check for rate limiting
+            if response.status_code == 429:
+                if attempt < MAX_RETRIES - 1:
+                    delay = RETRY_DELAYS[attempt]
+                    logger.warning(f"Wikipedia rate limit hit (429), retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    print(f"⚠️  [WIKIPEDIA] Rate limit, waiting {delay}s before retry...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error(f"Wikipedia rate limit hit (429), max retries exceeded")
+                    response.raise_for_status()
+
+            # Add delay after successful request to avoid rate limits
+            time.sleep(WIKIPEDIA_REQUEST_DELAY)
+            return response
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 429 or attempt >= MAX_RETRIES - 1:
+                raise
+
+    # Should never reach here, but just in case
+    raise Exception("Wikipedia API call failed after retries")
 
 
 def _normalize_place_name(name: str) -> str:
@@ -143,7 +179,8 @@ def _fetch_wikipedia_coordinates(title: str, client: httpx.Client) -> tuple[floa
     """Fetch coordinates for a Wikipedia article.
     Returns (lat, lon) or None if article has no coordinates."""
     try:
-        response = client.get(
+        response = _wikipedia_api_call(
+            client,
             WIKIPEDIA_API_URL,
             params={
                 "action": "query",
@@ -153,7 +190,6 @@ def _fetch_wikipedia_coordinates(title: str, client: httpx.Client) -> tuple[floa
             },
             headers={"User-Agent": USER_AGENT},
         )
-        response.raise_for_status()
         data = response.json()
 
         pages = data.get("query", {}).get("pages", {})
@@ -176,7 +212,8 @@ def _search_wikipedia_by_coordinates(lat: float, lon: float, client: httpx.Clien
     """Use Wikipedia's geosearch API to find articles near specific coordinates.
     This helps avoid disambiguation pages by finding the most relevant local article."""
     try:
-        response = client.get(
+        response = _wikipedia_api_call(
+            client,
             WIKIPEDIA_API_URL,
             params={
                 "action": "query",
@@ -188,7 +225,6 @@ def _search_wikipedia_by_coordinates(lat: float, lon: float, client: httpx.Clien
             },
             headers={"User-Agent": USER_AGENT},
         )
-        response.raise_for_status()
         data = response.json()
         results = data.get("query", {}).get("geosearch", [])
         if results:
@@ -202,7 +238,8 @@ def _search_wikipedia_title(place_name: str, client: httpx.Client) -> str | None
     """Use Wikipedia's search API to find the best matching article title.
     Handles typos, vague names, and alternate spellings."""
     try:
-        response = client.get(
+        response = _wikipedia_api_call(
+            client,
             WIKIPEDIA_API_URL,
             params={
                 "action": "opensearch",
@@ -212,7 +249,6 @@ def _search_wikipedia_title(place_name: str, client: httpx.Client) -> str | None
             },
             headers={"User-Agent": USER_AGENT},
         )
-        response.raise_for_status()
         data = response.json()
         # opensearch returns [query, [titles], [descriptions], [urls]]
         if len(data) >= 2 and len(data[1]) > 0:
@@ -226,7 +262,8 @@ def _search_wikipedia_titles(place_name: str, limit: int, client: httpx.Client) 
     """Use Wikipedia's search API to find multiple matching article titles.
     Returns up to 'limit' results for disambiguation handling."""
     try:
-        response = client.get(
+        response = _wikipedia_api_call(
+            client,
             WIKIPEDIA_API_URL,
             params={
                 "action": "opensearch",
@@ -236,7 +273,6 @@ def _search_wikipedia_titles(place_name: str, limit: int, client: httpx.Client) 
             },
             headers={"User-Agent": USER_AGENT},
         )
-        response.raise_for_status()
         data = response.json()
         # opensearch returns [query, [titles], [descriptions], [urls]]
         if len(data) >= 2 and len(data[1]) > 0:
@@ -250,7 +286,8 @@ def _search_wikipedia_titles(place_name: str, limit: int, client: httpx.Client) 
 def _fetch_extract(title: str, client: httpx.Client) -> dict | None:
     """Fetch the intro extract for an exact Wikipedia title."""
     try:
-        response = client.get(
+        response = _wikipedia_api_call(
+            client,
             WIKIPEDIA_API_URL,
             params={
                 "action": "query",
@@ -263,7 +300,6 @@ def _fetch_extract(title: str, client: httpx.Client) -> dict | None:
             },
             headers={"User-Agent": USER_AGENT},
         )
-        response.raise_for_status()
         data = response.json()
     except Exception as e:
         logger.error(f"Wikipedia extract failed for '{title}': {e}")
@@ -483,7 +519,6 @@ def _fetch_page_image(title: str, client: httpx.Client) -> dict | None:
             },
             headers={"User-Agent": USER_AGENT},
         )
-        response.raise_for_status()
         data = response.json()
     except Exception as e:
         logger.error(f"Wikimedia API failed for '{title}': {e}")
