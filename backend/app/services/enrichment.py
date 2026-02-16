@@ -225,12 +225,19 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
     try:
         # Try geosearch first if we have coordinates
         if lat is not None and lon is not None:
+            logger.info(f"Trying geosearch for '{place_name}' at coordinates ({lat}, {lon})")
             geo_title = _search_wikipedia_by_coordinates(lat, lon, client)
             if geo_title:
+                logger.info(f"Geosearch found title: '{geo_title}'")
                 result = _fetch_extract(geo_title, client)
-                if result and not _is_disambiguation_page(result["description"]):
-                    logger.info(f"✓ Wikipedia found for '{place_name}' via geosearch → '{geo_title}'")
-                    return result
+                if result:
+                    is_disambig = _is_disambiguation_page(result["description"])
+                    logger.info(f"Geosearch result is_disambiguation: {is_disambig}")
+                    if not is_disambig:
+                        logger.info(f"✓ Wikipedia found for '{place_name}' via geosearch → '{geo_title}'")
+                        return result
+                    else:
+                        logger.warning(f"✗ Geosearch returned disambiguation page for '{geo_title}', trying other methods")
 
         # Try multiple query variations
         normalized_name = _normalize_place_name(place_name)
