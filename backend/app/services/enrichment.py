@@ -217,6 +217,7 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
     Tries multiple query variations for better success rate.
     Uses coordinates (if provided) to avoid disambiguation pages.
     Returns dict with 'description' and 'wikipedia_url', or None if not found."""
+    print(f"🔍 [WIKIPEDIA] Looking up '{place_name}' with coords ({lat}, {lon})")
     should_close = False
     if client is None:
         client = httpx.Client(timeout=10.0)
@@ -226,18 +227,24 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
         # Try geosearch first if we have coordinates
         if lat is not None and lon is not None:
             logger.info(f"Trying geosearch for '{place_name}' at coordinates ({lat}, {lon})")
+            print(f"📍 [GEOSEARCH] Searching near ({lat}, {lon}) for '{place_name}'")
             geo_title = _search_wikipedia_by_coordinates(lat, lon, client)
             if geo_title:
                 logger.info(f"Geosearch found title: '{geo_title}'")
+                print(f"✓ [GEOSEARCH] Found article: '{geo_title}'")
                 result = _fetch_extract(geo_title, client)
                 if result:
                     is_disambig = _is_disambiguation_page(result["description"])
                     logger.info(f"Geosearch result is_disambiguation: {is_disambig}")
+                    print(f"🔍 [DISAMBIGUATION CHECK] '{geo_title}' is_disambiguation={is_disambig}")
+                    print(f"📝 [DESCRIPTION PREVIEW] {result['description'][:100]}...")
                     if not is_disambig:
                         logger.info(f"✓ Wikipedia found for '{place_name}' via geosearch → '{geo_title}'")
+                        print(f"✅ [WIKIPEDIA] Using geosearch result for '{place_name}'")
                         return result
                     else:
                         logger.warning(f"✗ Geosearch returned disambiguation page for '{geo_title}', trying other methods")
+                        print(f"⚠️  [GEOSEARCH] Disambiguation page detected, trying fallback methods")
 
         # Try multiple query variations
         normalized_name = _normalize_place_name(place_name)
@@ -261,6 +268,7 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                     return result
 
         logger.warning(f"✗ No Wikipedia page for '{place_name}' after trying {len(queries)} queries")
+        print(f"❌ [WIKIPEDIA] No suitable article found for '{place_name}'")
         return None
     finally:
         if should_close:

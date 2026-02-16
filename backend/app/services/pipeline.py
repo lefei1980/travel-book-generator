@@ -28,21 +28,26 @@ def _get_session() -> Session:
 
 def run_pipeline(trip_id: str) -> None:
     """Background pipeline that processes a trip through all stages."""
+    print(f"🔄 [PIPELINE] Starting pipeline for trip {trip_id}")
+    print(f"🔄 [PIPELINE] Pipeline stages: {PIPELINE_STAGES}")
     db: Session = _get_session()
     try:
         trip = db.query(Trip).filter(Trip.id == trip_id).first()
         if not trip:
             logger.error(f"Trip {trip_id} not found")
+            print(f"❌ [PIPELINE] Trip {trip_id} not found")
             return
 
         for stage in PIPELINE_STAGES:
             trip = db.query(Trip).filter(Trip.id == trip_id).first()
             if trip.status == "error":
+                print(f"❌ [PIPELINE] Trip {trip_id} in error state, stopping pipeline")
                 return
 
             trip.status = stage
             db.commit()
             logger.info(f"Trip {trip_id}: stage={stage}")
+            print(f"📍 [PIPELINE] Trip {trip_id}: stage={stage}")
 
             if stage == "geocoding":
                 geocode_trip(db, trip)
@@ -88,6 +93,7 @@ def run_pipeline(trip_id: str) -> None:
 
             elif stage == "rendering":
                 # Generate HTML preview but don't create PDF yet
+                print(f"🎨 [RENDERING] Generating HTML preview for trip {trip_id}")
                 from app.services.maps import render_trip_html
                 html_content = render_trip_html(trip)
 
@@ -100,6 +106,13 @@ def run_pipeline(trip_id: str) -> None:
                 db.commit()
 
                 logger.info(f"Trip {trip_id}: HTML preview generated, ready for user review")
+                print(f"✅ [RENDERING] HTML preview ready for trip {trip_id}")
+
+            elif stage == "preview_ready":
+                # Final stage - stop here and wait for user to request PDF
+                print(f"⏸️  [PREVIEW_READY] Trip {trip_id} ready for preview. Waiting for user confirmation.")
+                logger.info(f"Trip {trip_id}: Preview ready, stopping pipeline")
+                break
 
     except Exception as e:
         logger.exception(f"Pipeline error for trip {trip_id}")
