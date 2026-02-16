@@ -39,6 +39,10 @@ export default function TripForm() {
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Location shortcuts
+  const [useAllSameLocation, setUseAllSameLocation] = useState(false);
+  const [sharedLocation, setSharedLocation] = useState("");
+
   // Auto-calculate end date from start date + number of days
   const endDate = startDate && days.length > 0
     ? (() => {
@@ -173,6 +177,32 @@ export default function TripForm() {
     const newDays = [...days];
     newDays[index] = day;
     setDays(newDays);
+  };
+
+  const handleUseAllSameLocationChange = (checked: boolean) => {
+    setUseAllSameLocation(checked);
+    if (checked && sharedLocation) {
+      // Auto-fill all days with shared location
+      const updatedDays = days.map(d => ({
+        ...d,
+        start_location: sharedLocation,
+        end_location: sharedLocation,
+      }));
+      setDays(updatedDays);
+    }
+  };
+
+  const handleSharedLocationChange = (value: string) => {
+    setSharedLocation(value);
+    if (useAllSameLocation) {
+      // Auto-update all days
+      const updatedDays = days.map(d => ({
+        ...d,
+        start_location: value,
+        end_location: value,
+      }));
+      setDays(updatedDays);
+    }
   };
 
   const resetForm = () => {
@@ -310,6 +340,34 @@ export default function TripForm() {
         <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4">{error}</div>
       )}
 
+      {/* Location Shortcuts */}
+      <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={useAllSameLocation}
+            onChange={(e) => handleUseAllSameLocationChange(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span>All days start and end at the same location</span>
+          <span className="text-gray-400 font-normal">(e.g., same hotel entire trip)</span>
+        </label>
+
+        {useAllSameLocation && (
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Shared Location</label>
+            <input
+              type="text"
+              value={sharedLocation}
+              onChange={(e) => handleSharedLocationChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+              placeholder="e.g., Grand Hotel Paris"
+            />
+            <p className="mt-1 text-xs text-gray-500">This location will be used for all days' start and end locations</p>
+          </div>
+        )}
+      </div>
+
       <div className="mb-4">
         {days.map((day, idx) => (
           <DaySection
@@ -317,6 +375,8 @@ export default function TripForm() {
             day={day}
             onChange={(d) => updateDay(idx, d)}
             onRemove={() => removeDay(idx)}
+            sharedLocation={useAllSameLocation ? sharedLocation : undefined}
+            disabled={useAllSameLocation}
           />
         ))}
       </div>
