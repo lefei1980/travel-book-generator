@@ -320,6 +320,11 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
             best_distance = float('inf')
             best_source = None
 
+            # Track closest match even if >2km (for cities/large areas)
+            closest_result = None
+            closest_distance = float('inf')
+            closest_source = None
+
             # Try geosearch (finds articles with coordinates near the target)
             geo_title = _search_wikipedia_by_coordinates(lat, lon, client)
             if geo_title:
@@ -334,9 +339,20 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                         geo_distance = _calculate_distance(lat, lon, geo_coords[0], geo_coords[1])
                         logger.info(f"Geosearch result '{geo_title}' is {geo_distance:.0f}m away")
                         print(f"📏 [GEOSEARCH] Distance: {geo_distance:.0f}m")
-                        best_result = geo_result
-                        best_distance = geo_distance
-                        best_source = "geosearch"
+
+                        # Track as closest
+                        closest_result = geo_result
+                        closest_distance = geo_distance
+                        closest_source = "geosearch"
+
+                        # Also set as best if within 2km
+                        if geo_distance <= 2000:
+                            best_result = geo_result
+                            best_distance = geo_distance
+                            best_source = "geosearch"
+                        else:
+                            logger.info(f"Geosearch result beyond strict threshold ({geo_distance:.0f}m > 2000m)")
+                            print(f"⚠️  [GEOSEARCH] Beyond 2km, tracking as fallback")
                     else:
                         # No coordinates - skip (likely not a geographic location)
                         logger.info(f"Geosearch result '{geo_title}' has no coordinates, skipping")
@@ -373,19 +389,23 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                                 logger.info(f"Opensearch result '{search_title}' is {search_distance:.0f}m away")
                                 print(f"  📏 [OPENSEARCH] Distance: {search_distance:.0f}m")
 
-                                # Reject if too far away (likely wrong location)
-                                if search_distance > 2000:
-                                    logger.warning(f"Opensearch result too far ({search_distance:.0f}m), rejecting")
-                                    print(f"  ❌ [OPENSEARCH] Too far away ({search_distance:.0f}m > 2000m), skipping")
-                                    continue
+                                # Track closest match overall (even if >2km)
+                                if search_distance < closest_distance:
+                                    closest_result = search_result
+                                    closest_distance = search_distance
+                                    closest_source = "opensearch"
 
-                                # Compare with current best
-                                if search_distance < best_distance:
-                                    logger.info(f"Opensearch result is closer ({search_distance:.0f}m < {best_distance:.0f}m)")
-                                    print(f"  ✨ [OPENSEARCH] Better match! ({search_distance:.0f}m vs {best_distance:.0f}m)")
-                                    best_result = search_result
-                                    best_distance = search_distance
-                                    best_source = "opensearch"
+                                # Prefer matches within 2km (strict threshold for high confidence)
+                                if search_distance <= 2000:
+                                    if search_distance < best_distance:
+                                        logger.info(f"Opensearch result is closer ({search_distance:.0f}m < {best_distance:.0f}m)")
+                                        print(f"  ✨ [OPENSEARCH] Better match! ({search_distance:.0f}m)")
+                                        best_result = search_result
+                                        best_distance = search_distance
+                                        best_source = "opensearch"
+                                else:
+                                    logger.info(f"Opensearch result beyond strict threshold ({search_distance:.0f}m > 2000m), tracking as fallback")
+                                    print(f"  ⚠️  [OPENSEARCH] Beyond 2km ({search_distance:.0f}m), tracking as fallback")
                             else:
                                 # No coordinates - skip (likely person/concept, not a place)
                                 logger.info(f"Opensearch result '{search_title}' has no coordinates, skipping")
@@ -401,6 +421,13 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                 logger.info(f"✓ Using {best_source} result (distance: {best_distance:.0f}m)")
                 print(f"✅ [WIKIPEDIA] Selected: '{best_result['canonical_title']}' via {best_source} ({best_distance:.0f}m)")
                 return best_result
+            elif closest_result:
+                # No match within 2km, but we found the closest geographic article
+                # Accept it (likely a large city or area where 2km threshold is too strict)
+                logger.info(f"✓ Using closest match beyond 2km threshold: {closest_source} result (distance: {closest_distance:.0f}m)")
+                print(f"✅ [WIKIPEDIA] Selected closest match: '{closest_result['canonical_title']}' via {closest_source} ({closest_distance:.0f}m)")
+                print(f"⚠️  [NOTE] Distance >{2000}m - likely a large city/area")
+                return closest_result
 
         # Fallback: No coordinates, or coordinate-based matching found nothing
         # Use simple text-based search
