@@ -119,6 +119,74 @@ def geocode_preview(name: str, db: Session, limit: int = 10, client: httpx.Clien
     return results
 
 
+def get_place_metadata(name: str, client: httpx.Client | None = None) -> dict | None:
+    """Fetch detailed metadata from Nominatim for enrichment fallback.
+
+    Returns dict with:
+    - type: Place type (restaurant, tourism, etc.)
+    - category: Category (fast_food, museum, etc.)
+    - address: Structured address components
+    - display_name: Full address string
+
+    Used when Wikipedia enrichment fails to provide basic place info.
+    """
+    if MOCK_GEOCODING:
+        return None
+
+    should_close = False
+    if client is None:
+        client = httpx.Client(timeout=15.0)
+        should_close = True
+
+    try:
+        _rate_limit()
+        response = client.get(
+            NOMINATIM_URL,
+            params={
+                "q": name,
+                "format": "json",
+                "limit": 1,
+                "addressdetails": 1,  # Get structured address
+                "extratags": 1,  # Get extra tags (cuisine, etc.)
+            },
+            headers={"User-Agent": USER_AGENT},
+        )
+        response.raise_for_status()
+        results = response.json()
+
+        if not results:
+            return None
+
+        result = results[0]
+        address = result.get("address", {})
+        extratags = result.get("extratags", {})
+
+        # Build metadata
+        metadata = {
+            "type": result.get("type", "place"),
+            "category": result.get("class", ""),
+            "display_name": result.get("display_name", name),
+            "address": {
+                "road": address.get("road", ""),
+                "suburb": address.get("suburb", ""),
+                "city": address.get("city") or address.get("town") or address.get("village", ""),
+                "country": address.get("country", ""),
+                "postcode": address.get("postcode", ""),
+            },
+            "cuisine": extratags.get("cuisine", ""),
+            "opening_hours": extratags.get("opening_hours", ""),
+        }
+
+        return metadata
+
+    except Exception as e:
+        logger.error(f"Failed to fetch metadata for '{name}': {e}")
+        return None
+    finally:
+        if should_close:
+            client.close()
+
+
 def geocode_place(name: str, db: Session, client: httpx.Client | None = None) -> tuple[float, float, str] | None:
     """Geocode a place name to (lat, lon, display_name).
     Checks SQLite cache first, then calls Nominatim API.

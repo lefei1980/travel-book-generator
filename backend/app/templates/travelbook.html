@@ -175,13 +175,17 @@
     width: 100px;
     height: 75px;
     border-radius: 4px;
-    background: #e8e4dc;
+    background: linear-gradient(135deg, #e8e4dc 0%, #d4cfc4 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #aaa;
-    font-size: 10px;
+    color: #999;
+    font-size: 24px;
+    font-weight: bold;
   }
+  .poi-icon-restaurant::before { content: "🍽️"; }
+  .poi-icon-attraction::before { content: "🎯"; }
+  .poi-icon-hotel::before { content: "🏨"; }
   .poi-content { flex: 1; min-width: 0; }
   .poi-name { font-size: 14px; color: #1a1a2e; margin-bottom: 2px; }
   .poi-type { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold; }
@@ -274,9 +278,9 @@
     <div class="poi-number">{{ loop.index }}</div>
     {% if place.enrichment and place.enrichment.image_url %}
     <img class="poi-image" src="{{ place.enrichment.image_url }}" alt="{{ place.name }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
-    <div class="poi-image-placeholder" style="display:none">No image</div>
+    <div class="poi-image-placeholder poi-icon-{{ place.place_type }}" style="display:none"></div>
     {% else %}
-    <div class="poi-image-placeholder">No image</div>
+    <div class="poi-image-placeholder poi-icon-{{ place.place_type }}"></div>
     {% endif %}
     <div class="poi-content">
       <div class="poi-name">
@@ -289,8 +293,12 @@
       <div class="poi-description">
         {% if place.enrichment %}{{ place.enrichment.description }}{% else %}No description available.{% endif %}
       </div>
-      {% if place.enrichment and place.enrichment.image_attribution %}
-      <div class="poi-attribution">Image: {{ place.enrichment.image_attribution }}</div>
+      {% if place.enrichment %}
+        {% if place.enrichment.image_attribution %}
+        <div class="poi-attribution">Image: {{ place.enrichment.image_attribution }}</div>
+        {% elif place.enrichment.source == 'nominatim' %}
+        <div class="poi-attribution">Basic info from OpenStreetMap</div>
+        {% endif %}
       {% endif %}
     </div>
   </div>

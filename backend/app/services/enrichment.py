@@ -3,6 +3,7 @@ import re
 import httpx
 from sqlalchemy.orm import Session
 from app.models import Trip
+from app.services.geocoding import get_place_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -284,8 +285,43 @@ def get_wikimedia_image(place_name: str, client: httpx.Client | None = None) -> 
             client.close()
 
 
+def _create_fallback_description(metadata: dict, place_type: str) -> str:
+    """Create a basic description from Nominatim metadata when Wikipedia is not available."""
+    parts = []
+
+    # Type/category
+    place_category = metadata.get("type", "").replace("_", " ").title()
+    if place_category:
+        parts.append(place_category)
+
+    # Cuisine for restaurants
+    cuisine = metadata.get("cuisine", "")
+    if cuisine:
+        parts.append(f"{cuisine.replace('_', ' ').title()} cuisine")
+
+    # Address components
+    address = metadata.get("address", {})
+    city = address.get("city", "")
+    country = address.get("country", "")
+
+    if city or country:
+        location = f"{city}, {country}" if city and country else city or country
+        parts.append(f"Located in {location}")
+
+    # Build description
+    if parts:
+        # First part as type, rest as additional info
+        description = parts[0]
+        if len(parts) > 1:
+            description += " • " + " • ".join(parts[1:])
+        return description
+
+    return f"{place_type.title()} - No additional information available"
+
+
 def enrich_trip(db: Session, trip: Trip, client: httpx.Client | None = None) -> dict:
     """Enrich all places in a trip with Wikipedia descriptions and Wikimedia images.
+    Falls back to Nominatim metadata for places without Wikipedia articles.
     Returns a dict keyed by place name with description, image, and URLs."""
     should_close = False
     if client is None:
@@ -302,20 +338,33 @@ def enrich_trip(db: Session, trip: Trip, client: httpx.Client | None = None) -> 
                     "image_url": None,
                     "image_attribution": None,
                     "wikipedia_url": None,
+                    "source": "none",  # Track data source: wikipedia, nominatim, or none
                 }
 
-                # Get Wikipedia summary
+                # Try Wikipedia first (best quality)
                 wiki = get_wikipedia_summary(place.name, client)
                 if wiki:
                     place_info["description"] = wiki["description"]
                     place_info["native_name"] = wiki.get("native_name")
                     place_info["wikipedia_url"] = wiki["wikipedia_url"]
+                    place_info["source"] = "wikipedia"
 
-                # Get Wikimedia image
-                image = get_wikimedia_image(place.name, client)
-                if image:
-                    place_info["image_url"] = image["image_url"]
-                    place_info["image_attribution"] = image["image_attribution"]
+                    # Get Wikimedia image
+                    image = get_wikimedia_image(place.name, client)
+                    if image:
+                        place_info["image_url"] = image["image_url"]
+                        place_info["image_attribution"] = image["image_attribution"]
+                else:
+                    # Fallback to Nominatim metadata
+                    logger.info(f"Wikipedia not available for '{place.name}', using Nominatim metadata")
+                    metadata = get_place_metadata(place.name, client)
+                    if metadata:
+                        place_info["description"] = _create_fallback_description(metadata, place.place_type)
+                        place_info["source"] = "nominatim"
+                        # No image for Nominatim fallback
+                        logger.info(f"✓ Using Nominatim fallback for '{place.name}': {place_info['description']}")
+                    else:
+                        logger.warning(f"✗ No enrichment data available for '{place.name}'")
 
                 places_data[place.name] = place_info
     finally:
