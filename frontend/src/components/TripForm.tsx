@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createTrip, updateTrip, getTrip, getDownloadUrl, getPreviewUrl, generatePDF, DayInput, TripCreateRequest } from "@/lib/api";
+import { createTrip, updateTrip, getTrip, getDownloadUrl, getPreviewUrl, generatePDF, DayInput, TripCreateRequest, GeocodeResult } from "@/lib/api";
 import DaySection from "./DaySection";
+import LocationPreview from "./LocationPreview";
 
 const STATUS_MESSAGES: Record<string, string> = {
   pending: "Preparing your trip...",
@@ -42,6 +43,7 @@ export default function TripForm() {
   // Location shortcuts
   const [useAllSameLocation, setUseAllSameLocation] = useState(false);
   const [sharedLocation, setSharedLocation] = useState("");
+  const [showSharedLocationPreview, setShowSharedLocationPreview] = useState(false);
 
   // Auto-calculate end date from start date + number of days
   const endDate = startDate && days.length > 0
@@ -205,6 +207,11 @@ export default function TripForm() {
     }
   };
 
+  const handleSelectSharedLocation = (result: GeocodeResult) => {
+    handleSharedLocationChange(result.display_name);
+    setShowSharedLocationPreview(false);
+  };
+
   const resetForm = () => {
     setTripId(null);
     setStatus(null);
@@ -354,15 +361,23 @@ export default function TripForm() {
         </label>
 
         {useAllSameLocation && (
-          <div>
+          <div className="relative">
             <label className="block text-sm text-gray-600 mb-1">Shared Location</label>
             <input
               type="text"
               value={sharedLocation}
               onChange={(e) => handleSharedLocationChange(e.target.value)}
+              onFocus={() => setShowSharedLocationPreview(true)}
+              onBlur={() => setTimeout(() => setShowSharedLocationPreview(false), 300)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
               placeholder="e.g., Grand Hotel Paris"
             />
+            {showSharedLocationPreview && sharedLocation && (
+              <LocationPreview
+                query={sharedLocation}
+                onSelect={handleSelectSharedLocation}
+              />
+            )}
             <p className="mt-1 text-xs text-gray-500">This location will be used for all days' start and end locations</p>
           </div>
         )}
