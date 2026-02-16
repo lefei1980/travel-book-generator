@@ -108,29 +108,50 @@
 | Phase | Status | Files Changed | Time |
 |-------|--------|---------------|------|
 | Phase 7: UX Improvements | ✅ Complete | 10 files | 3h |
-| Phase 8: Enrichment Accuracy | ✅ Complete | 1 file | 1h |
+| Phase 8: Enrichment Accuracy | ✅ Complete | 1 file (backend) | 2h |
+| Phase 9: UX Improvements | ✅ Complete | 2 files (frontend) | 45min |
 
 ---
 
 ## 📝 Session Notes
 
 **Session 2026-02-16 (COMPLETED):**
-- 🔍 User reported two enrichment issues:
-  1. Disambiguation pages showing generic content
-  2. Missing thumbnail images for known attractions
-- 💡 Identified root causes:
-  1. Extracting from disambiguation page instead of specific article
-  2. Image lookup using original input instead of canonical Wikipedia title
-- 🎯 Solution: Coordinate-based article matching
-  - Validate opensearch results with distance calculation
-  - Use canonical titles consistently for descriptions and images
-- ✅ Implementation completed:
-  - Added `_fetch_wikipedia_coordinates()` for getting article coordinates
-  - Added `_calculate_distance()` using Haversine formula
-  - Rewrote `get_wikipedia_summary()` with coordinate-based matching logic
-  - Updated `enrich_trip()` to use canonical titles for image lookup
-  - Added comprehensive logging for debugging
-- 📦 Ready for deployment and testing
+
+### Phase 8: Wikipedia Enrichment Accuracy ✅
+- 🔍 User reported enrichment issues:
+  1. Disambiguation pages showing generic content (e.g., "Ponce")
+  2. Missing thumbnail images for known attractions (e.g., "El Yunque")
+  3. Wrong articles selected when multiple exist at same coordinates (e.g., "Castillo San Felipe del Morro" → "Fort Brooke")
+  4. Cities rejected due to strict 2km distance threshold (e.g., "Ponce, Puerto Rico" at 6.2km)
+
+- ✅ Fixes implemented:
+  1. **Multi-result disambiguation handling**: Try up to 5 opensearch results, skip disambiguation pages
+  2. **Canonical title for images**: Use Wikipedia article title (not user input) for image lookup
+  3. **Coordinate-based filtering**: Only accept articles with Wikipedia coordinates (filters out people/concepts)
+  4. **Adaptive distance threshold**: Accept closest match beyond 2km if no results within 2km (handles large cities)
+  5. **Prefer text matches**: When distances are similar (≤100m), prefer opensearch (text match) over geosearch
+
+- 📊 Results:
+  - "Ponce" → Now finds "Ponce, Puerto Rico" city with thumbnail ✓
+  - "El Yunque" → Now finds "El Yunque National Forest" with thumbnail ✓
+  - "Castillo San Felipe del Morro" → Now finds correct fort (not Fort Brooke) ✓
+
+### Phase 9: UX Improvements ✅
+- 🔍 User reported UX issues:
+  1. Drag-and-drop interferes with text selection (can't highlight text with mouse)
+  2. Repetitive location input for same hotel/location
+
+- ✅ Fixes implemented:
+  1. **Drag handle only**: Move draggable attribute to handle (⋮⋮) only, not entire card
+     - Text selection now works normally in all inputs ✓
+  2. **Trip-level location shortcut**: "All days start and end at same location"
+     - Single input auto-fills all days
+     - Use case: Same hotel entire trip
+  3. **Per-day location shortcut**: "End at same location as start" (default checked)
+     - Auto-copies start → end
+     - Use case: Multi-night stays at different hotels
+
+- 📦 All changes deployed and live in production
 
 **Previous Session 2026-02-15:**
 - ✅ Fixed deployment issues (mixed content, geocoding, enrichment)
