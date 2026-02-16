@@ -1,5 +1,6 @@
 import logging
 import re
+import math
 import httpx
 from sqlalchemy.orm import Session
 from app.models import Trip
@@ -117,6 +118,60 @@ def _is_disambiguation_page(text: str) -> bool:
     return any(indicator in text_lower for indicator in disambiguation_indicators)
 
 
+def _calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate distance between two coordinates using Haversine formula.
+    Returns distance in meters."""
+    # Earth's radius in meters
+    R = 6371000
+
+    # Convert to radians
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lon = math.radians(lon2 - lon1)
+
+    # Haversine formula
+    a = math.sin(delta_lat / 2) ** 2 + \
+        math.cos(lat1_rad) * math.cos(lat2_rad) * \
+        math.sin(delta_lon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
+
+
+def _fetch_wikipedia_coordinates(title: str, client: httpx.Client) -> tuple[float, float] | None:
+    """Fetch coordinates for a Wikipedia article.
+    Returns (lat, lon) or None if article has no coordinates."""
+    try:
+        response = client.get(
+            WIKIPEDIA_API_URL,
+            params={
+                "action": "query",
+                "titles": title,
+                "prop": "coordinates",
+                "format": "json",
+            },
+            headers={"User-Agent": USER_AGENT},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        pages = data.get("query", {}).get("pages", {})
+        for page_id, page in pages.items():
+            if page_id == "-1":
+                return None
+            coords = page.get("coordinates")
+            if coords and len(coords) > 0:
+                lat = coords[0].get("lat")
+                lon = coords[0].get("lon")
+                if lat is not None and lon is not None:
+                    return (lat, lon)
+        return None
+    except Exception as e:
+        logger.error(f"Failed to fetch coordinates for '{title}': {e}")
+        return None
+
+
 def _search_wikipedia_by_coordinates(lat: float, lon: float, client: httpx.Client) -> str | None:
     """Use Wikipedia's geosearch API to find articles near specific coordinates.
     This helps avoid disambiguation pages by finding the most relevant local article."""
@@ -208,15 +263,17 @@ def _fetch_extract(title: str, client: httpx.Client) -> dict | None:
             "description": summary,
             "native_name": native_name,
             "wikipedia_url": f"https://en.wikipedia.org/wiki/{canon_title.replace(' ', '_')}",
+            "canonical_title": canon_title,
         }
     return None
 
 
 def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float | None = None, client: httpx.Client | None = None) -> dict | None:
     """Query Wikipedia API for a place summary.
-    Tries multiple query variations for better success rate.
-    Uses coordinates (if provided) to avoid disambiguation pages.
-    Returns dict with 'description' and 'wikipedia_url', or None if not found."""
+    Uses coordinate-based matching to find the most relevant article.
+    Compares geosearch (coordinate-based) and opensearch (fuzzy text) results,
+    choosing the one closest to the target coordinates.
+    Returns dict with 'description', 'wikipedia_url', and 'canonical_title', or None if not found."""
     print(f"🔍 [WIKIPEDIA] Looking up '{place_name}' with coords ({lat}, {lon})")
     should_close = False
     if client is None:
@@ -224,39 +281,105 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
         should_close = True
 
     try:
-        # Try geosearch first if we have coordinates
-        if lat is not None and lon is not None:
-            logger.info(f"Trying geosearch for '{place_name}' at coordinates ({lat}, {lon})")
-            print(f"📍 [GEOSEARCH] Searching near ({lat}, {lon}) for '{place_name}'")
-            geo_title = _search_wikipedia_by_coordinates(lat, lon, client)
-            if geo_title:
-                logger.info(f"Geosearch found title: '{geo_title}'")
-                print(f"✓ [GEOSEARCH] Found article: '{geo_title}'")
-                result = _fetch_extract(geo_title, client)
-                if result:
-                    is_disambig = _is_disambiguation_page(result["description"])
-                    logger.info(f"Geosearch result is_disambiguation: {is_disambig}")
-                    print(f"🔍 [DISAMBIGUATION CHECK] '{geo_title}' is_disambiguation={is_disambig}")
-                    print(f"📝 [DESCRIPTION PREVIEW] {result['description'][:100]}...")
-                    if not is_disambig:
-                        logger.info(f"✓ Wikipedia found for '{place_name}' via geosearch → '{geo_title}'")
-                        print(f"✅ [WIKIPEDIA] Using geosearch result for '{place_name}'")
-                        return result
-                    else:
-                        logger.warning(f"✗ Geosearch returned disambiguation page for '{geo_title}', trying other methods")
-                        print(f"⚠️  [GEOSEARCH] Disambiguation page detected, trying fallback methods")
-
-        # Try multiple query variations
         normalized_name = _normalize_place_name(place_name)
         queries = [place_name]  # Original first
         if normalized_name != place_name:
             queries.append(normalized_name)  # Normalized second
 
+        # Use coordinate-based matching if we have coordinates
+        if lat is not None and lon is not None:
+            logger.info(f"Using coordinate-based matching for '{place_name}' at ({lat}, {lon})")
+            print(f"📍 [COORDINATE MATCHING] Target location: ({lat}, {lon})")
+
+            best_result = None
+            best_distance = float('inf')
+            best_source = None
+
+            # Try geosearch (finds articles with coordinates near the target)
+            geo_title = _search_wikipedia_by_coordinates(lat, lon, client)
+            if geo_title:
+                logger.info(f"Geosearch found: '{geo_title}'")
+                print(f"✓ [GEOSEARCH] Found article: '{geo_title}'")
+                geo_result = _fetch_extract(geo_title, client)
+                if geo_result and not _is_disambiguation_page(geo_result["description"]):
+                    # Geosearch already found something near our coordinates
+                    # Distance is implicitly small (within 1km radius)
+                    geo_coords = _fetch_wikipedia_coordinates(geo_title, client)
+                    if geo_coords:
+                        geo_distance = _calculate_distance(lat, lon, geo_coords[0], geo_coords[1])
+                        logger.info(f"Geosearch result '{geo_title}' is {geo_distance:.0f}m away")
+                        print(f"📏 [GEOSEARCH] Distance: {geo_distance:.0f}m")
+                        best_result = geo_result
+                        best_distance = geo_distance
+                        best_source = "geosearch"
+                    else:
+                        # No coordinates available, assume close match (within 1km)
+                        logger.info(f"Geosearch result '{geo_title}' has no coordinates, assuming close match")
+                        print(f"📏 [GEOSEARCH] No coordinates, assuming close match")
+                        best_result = geo_result
+                        best_distance = 500  # Assume 500m as reasonable estimate
+                        best_source = "geosearch (no coords)"
+                else:
+                    if geo_result:
+                        logger.warning(f"Geosearch returned disambiguation page: '{geo_title}'")
+                        print(f"⚠️  [GEOSEARCH] Disambiguation page detected")
+
+            # Try opensearch (fuzzy text matching)
+            for query in queries:
+                search_title = _search_wikipedia_title(query, client)
+                if search_title:
+                    logger.info(f"Opensearch found: '{search_title}' for query '{query}'")
+                    print(f"✓ [OPENSEARCH] Found article: '{search_title}'")
+                    search_result = _fetch_extract(search_title, client)
+                    if search_result and not _is_disambiguation_page(search_result["description"]):
+                        # Get coordinates for opensearch result
+                        search_coords = _fetch_wikipedia_coordinates(search_title, client)
+                        if search_coords:
+                            search_distance = _calculate_distance(lat, lon, search_coords[0], search_coords[1])
+                            logger.info(f"Opensearch result '{search_title}' is {search_distance:.0f}m away")
+                            print(f"📏 [OPENSEARCH] Distance: {search_distance:.0f}m")
+
+                            # Reject if too far away (likely wrong location)
+                            if search_distance > 2000:
+                                logger.warning(f"Opensearch result too far ({search_distance:.0f}m), rejecting")
+                                print(f"❌ [OPENSEARCH] Too far away ({search_distance:.0f}m > 2000m), rejecting")
+                                continue
+
+                            # Compare with current best
+                            if search_distance < best_distance:
+                                logger.info(f"Opensearch result is closer ({search_distance:.0f}m < {best_distance:.0f}m)")
+                                print(f"✨ [OPENSEARCH] Better match! ({search_distance:.0f}m vs {best_distance:.0f}m)")
+                                best_result = search_result
+                                best_distance = search_distance
+                                best_source = "opensearch"
+                        else:
+                            logger.info(f"Opensearch result '{search_title}' has no coordinates")
+                            print(f"⚠️  [OPENSEARCH] No coordinates available")
+                            # If we have no better option, use this
+                            if best_result is None:
+                                best_result = search_result
+                                best_source = "opensearch (no coords)"
+                    # Break after first successful query
+                    if best_result and best_source and "opensearch" in best_source:
+                        break
+
+            # Return the best match found
+            if best_result:
+                logger.info(f"✓ Using {best_source} result (distance: {best_distance:.0f}m)")
+                print(f"✅ [WIKIPEDIA] Selected: '{best_result['canonical_title']}' via {best_source} ({best_distance:.0f}m)")
+                return best_result
+
+        # Fallback: No coordinates, or coordinate-based matching found nothing
+        # Use simple text-based search
+        logger.info(f"Falling back to text-based search for '{place_name}'")
+        print(f"🔄 [FALLBACK] Using text-based search")
+
         for query in queries:
             # Try exact title match
             result = _fetch_extract(query, client)
             if result and not _is_disambiguation_page(result["description"]):
-                logger.info(f"✓ Wikipedia found for '{place_name}' using query '{query}'")
+                logger.info(f"✓ Wikipedia found for '{place_name}' using exact match '{query}'")
+                print(f"✅ [WIKIPEDIA] Found via exact match: '{query}'")
                 return result
 
             # Fallback: search for best matching title
@@ -265,6 +388,7 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                 result = _fetch_extract(search_title, client)
                 if result and not _is_disambiguation_page(result["description"]):
                     logger.info(f"✓ Wikipedia found for '{place_name}' via search '{query}' → '{search_title}'")
+                    print(f"✅ [WIKIPEDIA] Found via opensearch: '{search_title}'")
                     return result
 
         logger.warning(f"✗ No Wikipedia page for '{place_name}' after trying {len(queries)} queries")
@@ -418,11 +542,18 @@ def enrich_trip(db: Session, trip: Trip, client: httpx.Client | None = None) -> 
                     place_info["wikipedia_url"] = wiki["wikipedia_url"]
                     place_info["source"] = "wikipedia"
 
-                    # Get Wikimedia image
-                    image = get_wikimedia_image(place.name, client)
+                    # Get Wikimedia image using canonical Wikipedia title
+                    # This ensures we search for images using the exact article title we found,
+                    # not the user's original input (which may not match)
+                    canonical_title = wiki.get("canonical_title", place.name)
+                    logger.info(f"Fetching image for '{place.name}' using canonical title '{canonical_title}'")
+                    image = get_wikimedia_image(canonical_title, client)
                     if image:
                         place_info["image_url"] = image["image_url"]
                         place_info["image_attribution"] = image["image_attribution"]
+                        logger.info(f"✓ Found image for '{place.name}'")
+                    else:
+                        logger.warning(f"✗ No image found for '{place.name}' (canonical: '{canonical_title}')")
                 else:
                     # Fallback to Nominatim metadata
                     logger.info(f"Wikipedia not available for '{place.name}', using Nominatim metadata")
