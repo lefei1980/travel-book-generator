@@ -20,7 +20,15 @@
       "Bash(python -m json.tool:*)",
       "Bash(python -c:*)",
       "Bash(ls:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(chmod:*)",
+      "Bash(git rm:*)",
+      "Bash(vercel env:*)",
+      "Bash(gh run list:*)",
+      "Bash(DEBUG_NOTES.md:*)",
+      "Bash(vercel ls:*)",
+      "Bash(git reset:*)",
+      "Bash(git restore:*)"
     ]
   }
 }

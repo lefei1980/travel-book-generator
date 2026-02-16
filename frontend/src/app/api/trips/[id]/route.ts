@@ -34,3 +34,38 @@ export async function GET(
     );
   }
 }
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+
+    const response = await fetch(`${BACKEND_URL}/api/trips/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { detail: data.detail || "Failed to update trip" },
+        { status: response.status }
+      );
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Error proxying update request:", error);
+    return NextResponse.json(
+      { detail: "Failed to connect to backend" },
+      { status: 500 }
+    );
+  }
+}
