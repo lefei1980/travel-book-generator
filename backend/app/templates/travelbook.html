@@ -386,7 +386,7 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
 
 // Summary Map - Shows all trip locations with day-colored markers (no route)
 (function() {
-  var map = L.map('summary-map', { zoomControl: false }).setView([0, 0], 13);
+  var map = L.map('summary-map', { zoomControl: true }).setView([0, 0], 13);
   // Use CartoDB Voyager for better contrast and readability
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap, © CARTO',
@@ -397,21 +397,8 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
   var bounds = [];
   var allCoords = [];
 
-  // Collect all places AND start/end locations
+  // Collect all places (attractions/restaurants/hotels only - no start/end flags)
   {% for day in days %}
-  // Add start location
-  {% if day.start_coords %}
-  allCoords.push({
-    lat: {{ day.start_coords.lat }},
-    lng: {{ day.start_coords.lng }},
-    name: '{{ day.start_coords.name }}',
-    type: 'start',
-    day: {{ day.day_number }}
-  });
-  bounds.push([{{ day.start_coords.lat }}, {{ day.start_coords.lng }}]);
-  {% endif %}
-
-  // Add places (attractions/restaurants/hotels)
   {% for place in day.places %}
   {% if place.latitude and place.longitude %}
   allCoords.push({
@@ -424,18 +411,6 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
   bounds.push([{{ place.latitude }}, {{ place.longitude }}]);
   {% endif %}
   {% endfor %}
-
-  // Add end location
-  {% if day.end_coords %}
-  allCoords.push({
-    lat: {{ day.end_coords.lat }},
-    lng: {{ day.end_coords.lng }},
-    name: '{{ day.end_coords.name }}',
-    type: 'end',
-    day: {{ day.day_number }}
-  });
-  bounds.push([{{ day.end_coords.lat }}, {{ day.end_coords.lng }}]);
-  {% endif %}
   {% endfor %}
 
   // Add day-colored markers (no duplicates)
@@ -448,17 +423,9 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
       var icon;
       var label;
 
-      // Use different icons for start/end vs regular places
-      if (c.type === 'start') {
-        icon = makeStartIcon();
-        label = '<b>START (Day ' + c.day + '):</b> ' + c.name;
-      } else if (c.type === 'end') {
-        icon = makeEndIcon();
-        label = '<b>END (Day ' + c.day + '):</b> ' + c.name;
-      } else {
-        icon = makeIcon(dayColor);
-        label = '<b>Day ' + c.day + ':</b> ' + c.name;
-      }
+      // All markers use day-colored icons (no start/end on cover page)
+      icon = makeIcon(dayColor);
+      label = '<b>Day ' + c.day + ':</b> ' + c.name;
 
       L.marker([c.lat, c.lng], { icon: icon }).addTo(map).bindPopup(label);
     }
@@ -479,7 +446,7 @@ var totalMaps = {{ days|length }} + 1; // +1 for summary map
 // Day Maps
 {% for day in days %}
 (function() {
-  var map = L.map('map-day{{ day.day_number }}', { zoomControl: false }).setView([0, 0], 13);
+  var map = L.map('map-day{{ day.day_number }}', { zoomControl: true }).setView([0, 0], 13);
   // Use CartoDB Voyager for better contrast
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap, © CARTO',

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createTrip, updateTrip, getTrip, getDownloadUrl, getPreviewUrl, generatePDF, DayInput, TripCreateRequest } from "@/lib/api";
 import DaySection from "./DaySection";
 
@@ -37,6 +37,7 @@ export default function TripForm() {
   const [submitting, setSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('form');
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
 
   // Auto-calculate end date from start date + number of days
   const endDate = startDate && days.length > 0
@@ -147,38 +148,13 @@ export default function TripForm() {
     setError(null);
   };
 
-  const handleDownloadPDF = async () => {
-    if (!tripId) return;
-
-    setGeneratingPDF(true);
-    setError(null);
-
-    try {
-      await generatePDF(tripId);
-      setStatus("generating_pdf");
-      // Poll until PDF is ready
-      const checkPDF = async () => {
-        try {
-          const trip = await getTrip(tripId);
-          if (trip.status === "complete") {
-            setStatus("complete");
-            setGeneratingPDF(false);
-            setViewMode('status');
-          } else if (trip.status === "error") {
-            setError(trip.error_message || "PDF generation failed");
-            setGeneratingPDF(false);
-          } else {
-            setTimeout(checkPDF, 2000);
-          }
-        } catch {
-          setError("Failed to check PDF status");
-          setGeneratingPDF(false);
-        }
-      };
-      checkPDF();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate PDF");
-      setGeneratingPDF(false);
+  const handleDownloadPDF = () => {
+    // Trigger print dialog on the iframe content
+    // This preserves the current zoom/pan state of maps
+    if (previewIframeRef.current?.contentWindow) {
+      previewIframeRef.current.contentWindow.print();
+    } else {
+      setError("Preview not loaded. Please try again.");
     }
   };
 
@@ -229,10 +205,9 @@ export default function TripForm() {
                 </button>
                 <button
                   onClick={handleDownloadPDF}
-                  disabled={generatingPDF}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
                 >
-                  {generatingPDF ? "Generating PDF..." : "Download PDF"}
+                  Save as PDF
                 </button>
               </div>
             </div>
@@ -243,6 +218,7 @@ export default function TripForm() {
 
           <div className="bg-white rounded-lg shadow overflow-hidden" style={{ height: 'calc(100vh - 200px)' }}>
             <iframe
+              ref={previewIframeRef}
               src={getPreviewUrl(tripId)}
               className="w-full h-full border-0"
               title="Trip Preview"
