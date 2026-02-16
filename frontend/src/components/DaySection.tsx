@@ -100,7 +100,7 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
             value={day.start_location}
             onChange={(e) => onChange({ ...day, start_location: e.target.value })}
             onFocus={() => setShowStartPreview(true)}
-            onBlur={() => setTimeout(() => setShowStartPreview(false), 200)}
+            onBlur={() => setTimeout(() => setShowStartPreview(false), 300)}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
             placeholder="e.g., Hotel name or airport"
           />
@@ -118,7 +118,7 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
             value={day.end_location}
             onChange={(e) => onChange({ ...day, end_location: e.target.value })}
             onFocus={() => setShowEndPreview(true)}
-            onBlur={() => setTimeout(() => setShowEndPreview(false), 200)}
+            onBlur={() => setTimeout(() => setShowEndPreview(false), 300)}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
             placeholder="e.g., Hotel name"
           />
@@ -163,7 +163,7 @@ export default function DaySection({ day, onChange, onRemove }: DaySectionProps)
                 value={place.name}
                 onChange={(e) => updatePlace(idx, "name", e.target.value)}
                 onFocus={() => setShowPlacePreview(idx)}
-                onBlur={() => setTimeout(() => setShowPlacePreview(null), 200)}
+                onBlur={() => setTimeout(() => setShowPlacePreview(null), 300)}
                 className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
                 placeholder="Place name"
               />

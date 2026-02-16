@@ -60,16 +60,30 @@ export default function LocationPreview({ query, onSelect, className = "" }: Loc
     fetchResults();
   }, [shouldFetch, query]);
 
+  const extractMainName = (displayName: string): string => {
+    // Extract the main name (first part before comma)
+    // "Tour Eiffel, 5, Avenue Anatole France..." -> "Tour Eiffel"
+    const parts = displayName.split(',');
+    return parts[0].trim();
+  };
+
   const handleSelect = useCallback(
     (result: GeocodeResult) => {
       if (onSelect) {
-        onSelect(result);
+        // Create a modified result with short name for better display/Wikipedia search
+        const shortName = extractMainName(result.display_name);
+        onSelect({
+          ...result,
+          display_name: shortName, // Use short name for display and Wikipedia
+        });
       }
     },
     [onSelect]
   );
 
-  const handleShowMore = () => {
+  const handleShowMore = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent blur event
+    e.stopPropagation();
     setVisibleCount((prev) => Math.min(prev + RESULTS_PER_PAGE, results.length));
   };
 
@@ -118,21 +132,25 @@ export default function LocationPreview({ query, onSelect, className = "" }: Loc
         {visibleResults.map((result, idx) => (
           <button
             key={idx}
-            onClick={() => handleSelect(result)}
+            onMouseDown={(e) => {
+              e.preventDefault(); // Prevent blur event
+              handleSelect(result);
+            }}
             className="w-full p-3 text-left hover:bg-blue-50 transition-colors flex items-start gap-2 group"
+            title={result.display_name} // Show full address on hover
           >
-            <span className="text-lg">
+            <span className="text-lg flex-shrink-0">
               {idx === 0 ? "✓" : " "}
             </span>
             <div className="flex-1 min-w-0">
-              <div className="text-sm text-gray-900 group-hover:text-blue-700 truncate">
+              <div className="text-sm text-gray-900 group-hover:text-blue-700 break-words">
                 {result.display_name}
               </div>
               <div className="text-xs text-gray-500 mt-0.5">
                 {result.type} • {result.lat.toFixed(4)}, {result.lon.toFixed(4)}
               </div>
             </div>
-            <span className="text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
               Select
             </span>
           </button>
@@ -144,7 +162,7 @@ export default function LocationPreview({ query, onSelect, className = "" }: Loc
         </span>
         {hasMore && (
           <button
-            onClick={handleShowMore}
+            onMouseDown={handleShowMore}
             className="text-blue-600 hover:text-blue-800 font-medium"
           >
             Show {Math.min(RESULTS_PER_PAGE, results.length - visibleCount)} more
