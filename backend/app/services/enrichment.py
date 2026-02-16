@@ -338,12 +338,9 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                         best_distance = geo_distance
                         best_source = "geosearch"
                     else:
-                        # No coordinates available, assume close match (within 1km)
-                        logger.info(f"Geosearch result '{geo_title}' has no coordinates, assuming close match")
-                        print(f"📏 [GEOSEARCH] No coordinates, assuming close match")
-                        best_result = geo_result
-                        best_distance = 500  # Assume 500m as reasonable estimate
-                        best_source = "geosearch (no coords)"
+                        # No coordinates - skip (likely not a geographic location)
+                        logger.info(f"Geosearch result '{geo_title}' has no coordinates, skipping")
+                        print(f"⚠️  [GEOSEARCH] No coordinates (not a place), skipping")
                 else:
                     if geo_result:
                         logger.warning(f"Geosearch returned disambiguation page: '{geo_title}'")
@@ -390,12 +387,10 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                                     best_distance = search_distance
                                     best_source = "opensearch"
                             else:
-                                logger.info(f"Opensearch result '{search_title}' has no coordinates")
-                                print(f"  ⚠️  [OPENSEARCH] No coordinates available")
-                                # If we have no better option, use this
-                                if best_result is None:
-                                    best_result = search_result
-                                    best_source = "opensearch (no coords)"
+                                # No coordinates - skip (likely person/concept, not a place)
+                                logger.info(f"Opensearch result '{search_title}' has no coordinates, skipping")
+                                print(f"  ⚠️  [OPENSEARCH] No coordinates (not a place), skipping")
+                                continue
 
                     # Break after first query if we found a good result
                     if best_result and best_source and "opensearch" in best_source:

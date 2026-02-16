@@ -107,3 +107,4 @@ Read `CLAUDE.md` and `TODO.md` to resume work.
 ## IMPORTANT: After completing each phase, update `TODO.md` with the next phase's tasks, and remove completed tasks, before ending the session.
 ## IMPORTANT: Write debugging and diagnostic notes to `DEBUG_NOTES.md`.
 ## IMPORTANT: Never commit sensitive files (SSH keys, .env files, public IP addresses) to the repository.
+## IMPORTANT: Before implementing complex changes, present a concise plan in plain English and wait for user approval before coding.
