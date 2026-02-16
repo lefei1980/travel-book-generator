@@ -397,9 +397,16 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
 
                                 # Prefer matches within 2km (strict threshold for high confidence)
                                 if search_distance <= 2000:
-                                    if search_distance < best_distance:
-                                        logger.info(f"Opensearch result is closer ({search_distance:.0f}m < {best_distance:.0f}m)")
-                                        print(f"  ✨ [OPENSEARCH] Better match! ({search_distance:.0f}m)")
+                                    # Prefer opensearch (text match) over geosearch when distances are very close
+                                    # This handles cases where multiple articles exist at the same location
+                                    distance_difference = search_distance - best_distance
+                                    if search_distance < best_distance or distance_difference <= 100:
+                                        if search_distance < best_distance:
+                                            logger.info(f"Opensearch result is closer ({search_distance:.0f}m < {best_distance:.0f}m)")
+                                            print(f"  ✨ [OPENSEARCH] Better match! ({search_distance:.0f}m)")
+                                        else:
+                                            logger.info(f"Opensearch result at similar distance ({search_distance:.0f}m vs {best_distance:.0f}m), preferring text match")
+                                            print(f"  ✨ [OPENSEARCH] Similar distance, preferring text match ({search_distance:.0f}m vs {best_distance:.0f}m)")
                                         best_result = search_result
                                         best_distance = search_distance
                                         best_source = "opensearch"
