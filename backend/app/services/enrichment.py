@@ -222,6 +222,31 @@ def _search_wikipedia_title(place_name: str, client: httpx.Client) -> str | None
     return None
 
 
+def _search_wikipedia_titles(place_name: str, limit: int, client: httpx.Client) -> list[str]:
+    """Use Wikipedia's search API to find multiple matching article titles.
+    Returns up to 'limit' results for disambiguation handling."""
+    try:
+        response = client.get(
+            WIKIPEDIA_API_URL,
+            params={
+                "action": "opensearch",
+                "search": place_name,
+                "limit": limit,
+                "format": "json",
+            },
+            headers={"User-Agent": USER_AGENT},
+        )
+        response.raise_for_status()
+        data = response.json()
+        # opensearch returns [query, [titles], [descriptions], [urls]]
+        if len(data) >= 2 and len(data[1]) > 0:
+            return data[1]
+        return []
+    except Exception as e:
+        logger.error(f"Wikipedia search failed for '{place_name}': {e}")
+        return []
+
+
 def _fetch_extract(title: str, client: httpx.Client) -> dict | None:
     """Fetch the intro extract for an exact Wikipedia title."""
     try:
@@ -324,42 +349,55 @@ def get_wikipedia_summary(place_name: str, lat: float | None = None, lon: float 
                         logger.warning(f"Geosearch returned disambiguation page: '{geo_title}'")
                         print(f"⚠️  [GEOSEARCH] Disambiguation page detected")
 
-            # Try opensearch (fuzzy text matching)
+            # Try opensearch (fuzzy text matching) - get multiple results to handle disambiguation
             for query in queries:
-                search_title = _search_wikipedia_title(query, client)
-                if search_title:
-                    logger.info(f"Opensearch found: '{search_title}' for query '{query}'")
-                    print(f"✓ [OPENSEARCH] Found article: '{search_title}'")
-                    search_result = _fetch_extract(search_title, client)
-                    if search_result and not _is_disambiguation_page(search_result["description"]):
-                        # Get coordinates for opensearch result
-                        search_coords = _fetch_wikipedia_coordinates(search_title, client)
-                        if search_coords:
-                            search_distance = _calculate_distance(lat, lon, search_coords[0], search_coords[1])
-                            logger.info(f"Opensearch result '{search_title}' is {search_distance:.0f}m away")
-                            print(f"📏 [OPENSEARCH] Distance: {search_distance:.0f}m")
+                search_titles = _search_wikipedia_titles(query, limit=5, client=client)
+                if search_titles:
+                    logger.info(f"Opensearch found {len(search_titles)} results for query '{query}': {search_titles}")
+                    print(f"✓ [OPENSEARCH] Found {len(search_titles)} articles for '{query}'")
 
-                            # Reject if too far away (likely wrong location)
-                            if search_distance > 2000:
-                                logger.warning(f"Opensearch result too far ({search_distance:.0f}m), rejecting")
-                                print(f"❌ [OPENSEARCH] Too far away ({search_distance:.0f}m > 2000m), rejecting")
+                    # Try each search result until we find a good match
+                    for search_title in search_titles:
+                        logger.info(f"Trying opensearch result: '{search_title}'")
+                        print(f"  🔍 [OPENSEARCH] Checking: '{search_title}'")
+                        search_result = _fetch_extract(search_title, client)
+
+                        if search_result:
+                            # Check if it's a disambiguation page
+                            if _is_disambiguation_page(search_result["description"]):
+                                logger.info(f"Skipping disambiguation page: '{search_title}'")
+                                print(f"  ⚠️  [OPENSEARCH] Disambiguation page, skipping")
                                 continue
 
-                            # Compare with current best
-                            if search_distance < best_distance:
-                                logger.info(f"Opensearch result is closer ({search_distance:.0f}m < {best_distance:.0f}m)")
-                                print(f"✨ [OPENSEARCH] Better match! ({search_distance:.0f}m vs {best_distance:.0f}m)")
-                                best_result = search_result
-                                best_distance = search_distance
-                                best_source = "opensearch"
-                        else:
-                            logger.info(f"Opensearch result '{search_title}' has no coordinates")
-                            print(f"⚠️  [OPENSEARCH] No coordinates available")
-                            # If we have no better option, use this
-                            if best_result is None:
-                                best_result = search_result
-                                best_source = "opensearch (no coords)"
-                    # Break after first successful query
+                            # Get coordinates for opensearch result
+                            search_coords = _fetch_wikipedia_coordinates(search_title, client)
+                            if search_coords:
+                                search_distance = _calculate_distance(lat, lon, search_coords[0], search_coords[1])
+                                logger.info(f"Opensearch result '{search_title}' is {search_distance:.0f}m away")
+                                print(f"  📏 [OPENSEARCH] Distance: {search_distance:.0f}m")
+
+                                # Reject if too far away (likely wrong location)
+                                if search_distance > 2000:
+                                    logger.warning(f"Opensearch result too far ({search_distance:.0f}m), rejecting")
+                                    print(f"  ❌ [OPENSEARCH] Too far away ({search_distance:.0f}m > 2000m), skipping")
+                                    continue
+
+                                # Compare with current best
+                                if search_distance < best_distance:
+                                    logger.info(f"Opensearch result is closer ({search_distance:.0f}m < {best_distance:.0f}m)")
+                                    print(f"  ✨ [OPENSEARCH] Better match! ({search_distance:.0f}m vs {best_distance:.0f}m)")
+                                    best_result = search_result
+                                    best_distance = search_distance
+                                    best_source = "opensearch"
+                            else:
+                                logger.info(f"Opensearch result '{search_title}' has no coordinates")
+                                print(f"  ⚠️  [OPENSEARCH] No coordinates available")
+                                # If we have no better option, use this
+                                if best_result is None:
+                                    best_result = search_result
+                                    best_source = "opensearch (no coords)"
+
+                    # Break after first query if we found a good result
                     if best_result and best_source and "opensearch" in best_source:
                         break
 
