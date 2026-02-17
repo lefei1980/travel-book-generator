@@ -89,13 +89,26 @@
   .day-header {
     display: flex;
     align-items: baseline;
+    justify-content: space-between;
     gap: 10px;
     border-bottom: 2px solid #b8860b;
     padding-bottom: 6px;
     margin-bottom: 12px;
   }
+  .day-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex: 1;
+  }
   .day-number { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #b8860b; font-weight: bold; }
   .day-title { font-size: 20px; color: #1a1a2e; }
+  .day-date {
+    font-size: 13px;
+    color: #666;
+    font-style: italic;
+    white-space: nowrap;
+  }
 
   /* Smaller map for day page */
   .map-container {
@@ -244,8 +257,13 @@
 {% for day in days %}
 <div class="day-section">
   <div class="day-header">
-    <span class="day-number">Day {{ day.day_number }}</span>
-    <span class="day-title">{{ day.start_location or '' }}{% if day.start_location and day.end_location %} → {% endif %}{{ day.end_location or '' }}</span>
+    <div class="day-header-left">
+      <span class="day-number">Day {{ day.day_number }}</span>
+      <span class="day-title">{{ day.start_location or '' }}{% if day.start_location and day.end_location %} → {% endif %}{{ day.end_location or '' }}</span>
+    </div>
+    {% if day.date_formatted %}
+    <span class="day-date">{{ day.date_formatted }}</span>
+    {% endif %}
   </div>
 
   <div id="map-day{{ day.day_number }}" class="map-container"></div>

@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime, timedelta
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.orm import Session
 from app.models import Trip
@@ -33,6 +34,19 @@ def _build_template_data(trip: Trip) -> dict:
                 "enrichment": enrichment,
             })
 
+        # Calculate date for this day
+        day_date = None
+        day_date_formatted = None
+        if trip.start_date:
+            try:
+                start_dt = datetime.fromisoformat(str(trip.start_date))
+                day_dt = start_dt + timedelta(days=day.day_number - 1)
+                day_date = day_dt.date()
+                # Format: "Monday, June 15, 2025"
+                day_date_formatted = day_dt.strftime("%A, %B %d, %Y")
+            except (ValueError, TypeError):
+                logger.warning(f"Could not parse start_date: {trip.start_date}")
+
         days.append({
             "day_number": day.day_number,
             "start_location": day.start_location,
@@ -41,6 +55,8 @@ def _build_template_data(trip: Trip) -> dict:
             "end_coords": coords.get("end"),
             "route": route,
             "places": places,
+            "date": day_date,
+            "date_formatted": day_date_formatted,
         })
 
     return {
