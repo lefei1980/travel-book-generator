@@ -11,6 +11,7 @@ services:
       - CONTACT_EMAIL=${CONTACT_EMAIL:-your-email@example.com}
       - MOCK_GEOCODING=${MOCK_GEOCODING:-false}
       - DATABASE_URL=sqlite:///./data/travelbook.db
+      - GROQ_API_KEY=${GROQ_API_KEY}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
