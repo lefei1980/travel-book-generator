@@ -5,6 +5,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    messages: Mapped[list | None] = mapped_column(JSON, nullable=True)  # list of {role, content}
+    trip_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("trips.id"), nullable=True)
+
+
 class Trip(Base):
     __tablename__ = "trips"
 

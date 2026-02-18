@@ -7,6 +7,9 @@
 - Backend: Oracle Cloud VM (HTTP via public IP)
 - CI/CD: Automated via GitHub Actions
 
+**Stable Revert Point (manual-entry-only baseline):**
+- Commit: `709acbf4ae4d1f5f5c38872d84b2c85da24b3401` — "Add date and day of week to daily itineraries"
+
 **Recent Fixes Completed:**
 - ✅ Phase 7: Real-time geocoding preview, improved descriptions, unlimited POIs per day
 - ✅ Mixed content blocking (Next.js API proxy)
@@ -159,6 +162,74 @@
 - ✅ User tested Puerto Rico - identified geocoding accuracy issue
 - ✅ Implemented Phase 7 (all 3 priorities)
 - ✅ All features deployed and live in production
+
+---
+
+---
+
+## ✅ Phase 10: Automation Upgrade — Chat UI + LLM + JSON Generation (COMPLETE)
+
+### Overview
+Add an AI chat interface so users can plan trips conversationally. Clicking "Finalize" converts
+the conversation to structured JSON and feeds directly into the existing pipeline (geocoding →
+enriching → rendering → PDF). The existing manual-entry form remains as a second tab.
+
+### Backend Tasks
+
+- [ ] Install `groq` Python package — add to `requirements.txt`
+- [ ] Create `backend/app/services/llm.py`
+  - Groq client wrapper (model: `llama-3.3-70b-versatile`)
+  - `chat_with_llm(messages, temperature)` — returns assistant reply string
+  - `generate_itinerary_json(messages)` — calls LLM at temp=0.1 with JSON schema prompt, returns parsed dict
+  - `generate_name_variants(place, city, country)` — fallback helper (used in Phase 2)
+  - System prompts: Stage 1 (conversational, no JSON), Stage 2 (JSON only, strict schema)
+- [ ] Add `ChatSession` model to `backend/app/models.py`
+  - Fields: `id` (UUID), `created_at`, `messages` (JSON column — list of {role, content}), `trip_id` (nullable FK to Trip)
+- [ ] Add chat schemas to `backend/app/schemas.py`
+  - `ChatMessageRequest` — `{ session_id: str | None, message: str }`
+  - `ChatMessageResponse` — `{ session_id: str, reply: str }`
+  - `FinalizeRequest` — `{ session_id: str }`
+  - `FinalizeResponse` — `{ trip_id: str, status: str }`
+- [ ] Create `backend/app/routers/chat.py`
+  - `POST /api/chat` — create or continue session, call LLM Stage 1, return reply
+  - `POST /api/chat/{session_id}/finalize` — call LLM Stage 2 → JSON → validate → save Trip → trigger existing pipeline → return trip_id
+  - `GET /api/chat/{session_id}` — return full message history
+- [ ] Register chat router in `backend/app/main.py`
+- [ ] Run Alembic migration (or recreate DB) to add `chat_sessions` table
+
+### Frontend Tasks
+
+- [ ] Add Next.js API proxy routes for chat endpoints:
+  - `src/app/api/chat/route.ts` — proxy `POST /api/chat`
+  - `src/app/api/chat/[id]/finalize/route.ts` — proxy `POST /api/chat/{id}/finalize`
+  - `src/app/api/chat/[id]/route.ts` — proxy `GET /api/chat/{id}`
+- [ ] Create `src/components/ChatPlanner.tsx`
+  - Scrollable message list (user bubbles right, assistant bubbles left)
+  - Text input + Send button (Enter to send)
+  - "Finalize Itinerary" button — appears after at least 2 exchanges
+  - On finalize: calls finalize endpoint → receives `trip_id` → switches to progress bar view (reuse existing polling + download UI from `TripForm`)
+  - Loading indicator while waiting for LLM reply
+- [ ] Update `src/app/page.tsx` to show two tabs:
+  - "AI Chat" tab → `<ChatPlanner />`
+  - "Manual Entry" tab → existing `<TripForm />` (unchanged)
+- [ ] Update `src/lib/api.ts` — add chat API functions
+
+### What was built
+- `backend/app/services/llm.py` — Groq client (llama-3.3-70b-versatile), chat + JSON generation
+- `backend/app/models.py` — ChatSession model (id, created_at, messages JSON, trip_id FK)
+- `backend/app/schemas.py` — ChatMessageRequest/Response, FinalizeResponse, ChatSessionResponse
+- `backend/app/routers/chat.py` — POST /api/chat, POST /api/chat/{id}/finalize, GET /api/chat/{id}
+- `frontend/src/app/api/chat/` — 3 Next.js proxy routes
+- `frontend/src/components/ChatPlanner.tsx` — full chat UI with status/preview/download flow
+- `frontend/src/app/page.tsx` — two-tab layout (AI Chat / Manual Entry)
+- `frontend/src/lib/api.ts` — sendChatMessage, finalizeChat functions
+- Groq API smoke tested and working ✅
+
+### Deployment Steps (to apply to production)
+1. Commit and push — GitHub Actions deploys frontend to Vercel automatically
+2. On Oracle VM: `pip install groq==0.13.1` in the venv
+3. On Oracle VM: add `GROQ_API_KEY=...` to `backend/.env`
+4. Restart backend service (`systemctl restart travelbook` or equivalent)
 
 ---
 

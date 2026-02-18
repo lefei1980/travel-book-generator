@@ -4,7 +4,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
-from app.routers import trips, geocode
+from app.routers import trips, geocode, chat
 
 # Configure logging to show in Docker logs
 logging.basicConfig(
@@ -38,6 +38,7 @@ app.add_middleware(
 
 app.include_router(trips.router)
 app.include_router(geocode.router)
+app.include_router(chat.router)
 
 
 @app.get("/health")

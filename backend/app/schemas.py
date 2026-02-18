@@ -2,6 +2,29 @@ from pydantic import BaseModel, field_validator
 from typing import Optional
 
 
+# --- Chat schemas ---
+
+class ChatMessageRequest(BaseModel):
+    session_id: Optional[str] = None
+    message: str
+
+
+class ChatMessageResponse(BaseModel):
+    session_id: str
+    reply: str
+
+
+class FinalizeResponse(BaseModel):
+    trip_id: str
+    title: str
+    status: str
+
+
+class ChatSessionResponse(BaseModel):
+    session_id: str
+    messages: list[dict]
+
+
 class PlaceInput(BaseModel):
     name: str
     place_type: str  # hotel, attraction, restaurant

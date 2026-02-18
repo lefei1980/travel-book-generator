@@ -41,6 +41,7 @@ coverage/
 public-IP-address.txt
 trip_output.json
 vercel_api_token.txt
+groq_api_key.txt
 
 # Local settings
 .claude/settings.local.json

@@ -101,6 +101,18 @@ cp backend/.env.example backend/.env
 - **CI/CD**: GitHub Actions (automated deployment)
 - See `DEPLOYMENT.md` for complete deployment guide
 
+## Stable Revert Point
+If the automation upgrade causes issues and needs to be rolled back to the last known-working manual-entry-only state:
+- **Commit**: `709acbf4ae4d1f5f5c38872d84b2c85da24b3401`
+- **Message**: "Add date and day of week to daily itineraries"
+- **Restore**: `git checkout 709acbf4ae4d1f5f5c38872d84b2c85da24b3401`
+
+## LLM Integration
+- **Provider**: Groq (groq.com) — free tier
+- **Model**: `llama-3.3-70b-versatile` for chat; `llama-3.3-70b-versatile` for JSON generation
+- **API Key**: stored in `backend/.env` as `GROQ_API_KEY` (never commit this file)
+- **Rate limits**: 30 RPM, 1,000 req/day, 100K tokens/day (free tier)
+
 ## Session Startup
 Read `CLAUDE.md` and `TODO.md` to resume work.
 

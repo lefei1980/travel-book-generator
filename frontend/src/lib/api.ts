@@ -123,6 +123,50 @@ export interface GeocodePreviewResponse {
   message?: string;
 }
 
+// --- Chat API ---
+
+export interface ChatMessageRequest {
+  session_id?: string | null;
+  message: string;
+}
+
+export interface ChatMessageResponse {
+  session_id: string;
+  reply: string;
+}
+
+export interface FinalizeResponse {
+  trip_id: string;
+  title: string;
+  status: string;
+}
+
+export async function sendChatMessage(
+  data: ChatMessageRequest
+): Promise<ChatMessageResponse> {
+  const res = await fetch(`${API_BASE}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || "Failed to send message");
+  }
+  return res.json();
+}
+
+export async function finalizeChat(sessionId: string): Promise<FinalizeResponse> {
+  const res = await fetch(`${API_BASE}/api/chat/${sessionId}/finalize`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || "Failed to finalize itinerary");
+  }
+  return res.json();
+}
+
 export async function geocodePreview(
   query: string,
   limit: number = 10
