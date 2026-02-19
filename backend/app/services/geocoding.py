@@ -307,6 +307,23 @@ def _normalize_place_name(name: str) -> str:
     return normalized.strip()
 
 
+def _extract_neighborhood(name: str) -> str | None:
+    """Extract a geocodable neighborhood/place from a vague accommodation description.
+    E.g., 'AirBnb near Loiza' -> 'Loiza'
+          'Hotel near Old Town'  -> 'Old Town'
+          'Hostel in Miraflores' -> 'Miraflores'
+    Returns None if no clear neighborhood can be extracted."""
+    import re
+    # Patterns like "near X", "in X", "at X", "by X" where X is the geocodable part
+    match = re.search(r'\b(?:near|in|at|by|close to)\s+(.+)$', name, re.IGNORECASE)
+    if match:
+        extracted = match.group(1).strip()
+        # Only return if it looks like a real place (not too short or too generic)
+        if len(extracted) >= 3 and extracted.lower() not in {"the", "a", "an", "downtown", "center"}:
+            return extracted
+    return None
+
+
 def _extract_city_context(location: str | None) -> str | None:
     """Extract city/country context from a location string.
     E.g., 'Charles de Gaulle Airport, Paris' -> 'Paris'
@@ -439,8 +456,14 @@ def geocode_place_smart(
         logger.info(f"Geocoding '{name}' (city={city}, country={country}): {len(candidates)} candidates, best score={score:.0f}")
 
         if best and score >= 60:
-            logger.info(f"✓ High-confidence match for '{name}': {best.get('display_name', '')[:80]} (score={score:.0f})")
-            return _save_and_return(best, cache_key)
+            # For high-confidence results, still validate country if specified
+            if country and country.lower() not in best.get("display_name", "").lower():
+                logger.warning(f"✗ Rejected high-score result for '{name}' — country '{country}' not in: {best.get('display_name', '')[:60]}")
+                best = None
+                score = 0
+            else:
+                logger.info(f"✓ High-confidence match for '{name}': {best.get('display_name', '')[:80]} (score={score:.0f})")
+                return _save_and_return(best, cache_key)
 
         # Score too low — try plain name alone if we haven't already
         if city or country:
@@ -451,6 +474,15 @@ def geocode_place_smart(
                 best = plain_best
                 score = plain_score
                 logger.info(f"Plain name search improved score to {score:.0f}")
+
+        # Country validation: reject any result that doesn't match the expected country
+        # This prevents "El Mesón" (Puerto Rico) → Spain, or "La Estación" (Puerto Rico) → Colombia
+        if best and country:
+            display_lower = best.get("display_name", "").lower()
+            if country.lower() not in display_lower:
+                logger.warning(f"✗ Country mismatch for '{name}': expected '{country}', got: {display_lower[:60]}")
+                best = None
+                score = 0
 
         if best and score >= 40:
             logger.info(f"✓ Medium-confidence match for '{name}': {best.get('display_name', '')[:80]} (score={score:.0f})")
@@ -514,10 +546,38 @@ def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
 
             # Geocode start/end locations using smart scorer with day-level city/country context
             # This prevents "Keystone RV Park" → Florida instead of South Dakota
+            seen_start_end: set[str] = set()
             for location_name in [day.start_location, day.end_location]:
-                if location_name:
-                    logger.info(f"Geocoding start/end '{location_name}' (city='{day_city}', country='{day_country}')")
-                    geocode_place_smart(location_name, day_city, day_country, db, client)
+                if not location_name or location_name in seen_start_end:
+                    continue
+                seen_start_end.add(location_name)
+
+                logger.info(f"Geocoding start/end '{location_name}' (city='{day_city}', country='{day_country}')")
+                result = geocode_place_smart(location_name, day_city, day_country, db, client)
+
+                if not result:
+                    # Try extracting neighborhood from vague descriptions like "AirBnb near Loiza"
+                    neighborhood = _extract_neighborhood(location_name)
+                    fallback = neighborhood or day_city
+                    if fallback and fallback.lower() != location_name.lower():
+                        logger.info(f"Start/end fallback: trying '{fallback}' for ungeocodable '{location_name}'")
+                        fallback_result = geocode_place_smart(fallback, "", day_country, db, client)
+                        if fallback_result:
+                            # Store under the original context key so pipeline lookup finds it
+                            ctx_key = ", ".join(p for p in [location_name, day_city, day_country] if p)
+                            existing = db.query(GeocodingCache).filter(
+                                GeocodingCache.place_name == ctx_key
+                            ).first()
+                            if not existing:
+                                entry = GeocodingCache(
+                                    place_name=ctx_key,
+                                    latitude=fallback_result[0],
+                                    longitude=fallback_result[1],
+                                    display_name=f"{location_name} (approx. {fallback})",
+                                )
+                                db.add(entry)
+                                db.commit()
+                                logger.info(f"⚠ Stored approx. coords for '{location_name}' using '{fallback}'")
 
             # Geocode each place using smart scoring with city/country context
             for place in day.places:
