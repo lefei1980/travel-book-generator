@@ -379,11 +379,16 @@ def geocode_place_smart(
         logger.debug(f"Cache hit for '{cache_key}'")
         return (cached.latitude, cached.longitude, cached.display_name or cache_key)
 
-    # Also check cache for plain name
+    # Also check cache for plain name, but only if BOTH city AND country match the cached result
+    # (city alone is insufficient — e.g., "Keystone" exists in both Florida and South Dakota)
     cached = db.query(GeocodingCache).filter(GeocodingCache.place_name == name).first()
-    if cached and city and city.lower() in (cached.display_name or "").lower():
-        logger.debug(f"Cache hit (name only, city validated) for '{name}'")
-        return (cached.latitude, cached.longitude, cached.display_name or name)
+    if cached:
+        display = (cached.display_name or "").lower()
+        city_match = not city or city.lower() in display
+        country_match = not country or country.lower() in display
+        if city_match and country_match and (city or country):
+            logger.debug(f"Cache hit (name only, city+country validated) for '{name}'")
+            return (cached.latitude, cached.longitude, cached.display_name or name)
 
     if MOCK_GEOCODING:
         return geocode_place(name, db, client)
@@ -501,23 +506,25 @@ def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
 
     try:
         for day in trip.days:
-            # Geocode start/end locations (for routing)
+            # Derive city/country context from this day's place hints
+            # e.g. Day 2 has hints for "Mount Rushmore" (city=Keystone) → use that to geocode "Keystone RV Park"
+            day_hints = {k: v for k, v in hints.items() if k.startswith(f"{day.day_number}:")}
+            day_country = next((h.get("country", "") for h in day_hints.values() if h.get("country")), "")
+            day_city = next((h.get("city", "") for h in day_hints.values() if h.get("city")), "")
+
+            # Geocode start/end locations using smart scorer with day-level city/country context
+            # This prevents "Keystone RV Park" → Florida instead of South Dakota
             for location_name in [day.start_location, day.end_location]:
                 if location_name:
-                    geocode_place(location_name, db, client)
-
-            # Extract city context from start or end location as fallback
-            city_context = (
-                _extract_city_context(day.start_location) or
-                _extract_city_context(day.end_location)
-            )
+                    logger.info(f"Geocoding start/end '{location_name}' (city='{day_city}', country='{day_country}')")
+                    geocode_place_smart(location_name, day_city, day_country, db, client)
 
             # Geocode each place using smart scoring with city/country context
             for place in day.places:
                 hint_key = f"{day.day_number}:{place.name}"
                 hint = hints.get(hint_key, {})
-                city = hint.get("city", "") or city_context or ""
-                country = hint.get("country", "")
+                city = hint.get("city", "") or day_city or ""
+                country = hint.get("country", "") or day_country or ""
 
                 logger.info(f"Geocoding '{place.name}' (city='{city}', country='{country}')")
                 result = geocode_place_smart(place.name, city, country, db, client)

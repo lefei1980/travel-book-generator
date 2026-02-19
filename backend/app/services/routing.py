@@ -9,8 +9,16 @@ OSRM_URL = "https://router.project-osrm.org/route/v1/driving"
 
 
 def _get_coordinates(name: str, db: Session) -> tuple[float, float] | None:
-    """Look up cached coordinates for a place name."""
-    cached = db.query(GeocodingCache).filter(GeocodingCache.place_name == name).first()
+    """Look up cached coordinates for a place name.
+    Prefers context-enriched entries ("Name, City, Country") over plain-name entries,
+    since plain-name entries may have been geocoded without city/country validation."""
+    # Prefer smart-geocoded entries that include city/country context (more accurate)
+    cached = db.query(GeocodingCache).filter(
+        GeocodingCache.place_name.like(f"{name},%")
+    ).first()
+    if not cached:
+        # Fall back to exact plain-name match
+        cached = db.query(GeocodingCache).filter(GeocodingCache.place_name == name).first()
     if cached:
         return (cached.longitude, cached.latitude)  # OSRM uses lon,lat order
     return None

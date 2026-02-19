@@ -55,17 +55,27 @@ def run_pipeline(trip_id: str) -> None:
                 start_end_coords = {}
                 for day in trip.days:
                     from app.models import GeocodingCache
+
+                    def _lookup_location(location_name: str) -> dict | None:
+                        """Prefer context-enriched cache entries (name + city/country) over plain-name."""
+                        # Try prefix match: "Name, City, Country" format (smart geocoder)
+                        cached = db.query(GeocodingCache).filter(
+                            GeocodingCache.place_name.like(f"{location_name},%")
+                        ).first()
+                        if not cached:
+                            # Fall back to substring match
+                            cached = db.query(GeocodingCache).filter(
+                                GeocodingCache.place_name.like(f"%{location_name}%")
+                            ).first()
+                        return cached
+
                     coords = {}
                     if day.start_location:
-                        cached = db.query(GeocodingCache).filter(
-                            GeocodingCache.place_name.like(f"%{day.start_location}%")
-                        ).first()
+                        cached = _lookup_location(day.start_location)
                         if cached:
                             coords["start"] = {"lat": cached.latitude, "lng": cached.longitude, "name": day.start_location}
                     if day.end_location:
-                        cached = db.query(GeocodingCache).filter(
-                            GeocodingCache.place_name.like(f"%{day.end_location}%")
-                        ).first()
+                        cached = _lookup_location(day.end_location)
                         if cached:
                             coords["end"] = {"lat": cached.latitude, "lng": cached.longitude, "name": day.end_location}
                     start_end_coords[str(day.day_number)] = coords
