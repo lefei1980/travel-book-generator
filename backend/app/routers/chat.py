@@ -93,6 +93,9 @@ def finalize_itinerary(
     db.add(trip)
     db.flush()
 
+    # Build geocoding hints from city/country fields provided by LLM
+    geocoding_hints: dict[str, dict] = {}
+
     # Create Day and Place records
     for day_input in trip_request.days:
         day = Day(
@@ -111,6 +114,18 @@ def finalize_itinerary(
                 order_index=idx,
             )
             db.add(place)
+            # Store city/country hint for geocoding if provided by LLM
+            if place_input.city or place_input.country:
+                hint_key = f"{day_input.day_number}:{place_input.name}"
+                geocoding_hints[hint_key] = {
+                    "city": place_input.city or "",
+                    "country": place_input.country or "",
+                }
+
+    # Store geocoding hints in enriched_data so the pipeline can use them
+    if geocoding_hints:
+        trip.enriched_data = {"geocoding_hints": geocoding_hints}
+        logger.info(f"Stored {len(geocoding_hints)} geocoding hints for trip {trip.id}")
 
     # Link session to trip and persist
     session.trip_id = trip.id

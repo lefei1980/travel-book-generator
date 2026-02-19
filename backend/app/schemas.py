@@ -28,6 +28,8 @@ class ChatSessionResponse(BaseModel):
 class PlaceInput(BaseModel):
     name: str
     place_type: str  # hotel, attraction, restaurant
+    city: Optional[str] = None
+    country: Optional[str] = None
 
     @field_validator("name")
     @classmethod

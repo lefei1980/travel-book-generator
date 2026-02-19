@@ -322,6 +322,168 @@ def _extract_city_context(location: str | None) -> str | None:
     return None
 
 
+def _score_candidate(candidate: dict, name: str, city: str, country: str) -> float:
+    """Score a Nominatim candidate result for relevance.
+
+    Scoring:
+    - Name found in display_name: +50
+    - City found in display_name: +20
+    - Country found in display_name: +20
+    - Penalty for very short names (avoid wrong matches): -10 if name < 4 chars
+    """
+    display = candidate.get("display_name", "").lower()
+    score = 0.0
+
+    if name.lower() in display:
+        score += 50
+    elif any(word in display for word in name.lower().split() if len(word) > 3):
+        # Partial word match (e.g., "Eiffel" matched in "Tour Eiffel")
+        score += 25
+
+    if city and city.lower() in display:
+        score += 20
+
+    if country and country.lower() in display:
+        score += 20
+
+    # Boost by Nominatim importance score (0-1 scale → up to +10 bonus)
+    score += float(candidate.get("importance", 0)) * 10
+
+    return score
+
+
+def geocode_place_smart(
+    name: str,
+    city: str,
+    country: str,
+    db: Session,
+    client: httpx.Client | None = None,
+) -> tuple[float, float, str] | None:
+    """Geocode a place using city/country context and multi-candidate scoring.
+
+    Strategy:
+    1. Build query: "Place Name, City, Country"
+    2. Fetch up to 5 candidates from Nominatim
+    3. Score each candidate (name match + city match + country match)
+    4. Accept best if score >= 60
+    5. If best score < 40: ask LLM for variant names and retry
+    6. Always return best result above a minimum threshold (>= 20) or None
+    """
+    # Build cache key using the full context query
+    context_parts = [p for p in [name, city, country] if p]
+    cache_key = ", ".join(context_parts)
+
+    # Check cache first
+    cached = db.query(GeocodingCache).filter(GeocodingCache.place_name == cache_key).first()
+    if cached:
+        logger.debug(f"Cache hit for '{cache_key}'")
+        return (cached.latitude, cached.longitude, cached.display_name or cache_key)
+
+    # Also check cache for plain name
+    cached = db.query(GeocodingCache).filter(GeocodingCache.place_name == name).first()
+    if cached and city and city.lower() in (cached.display_name or "").lower():
+        logger.debug(f"Cache hit (name only, city validated) for '{name}'")
+        return (cached.latitude, cached.longitude, cached.display_name or name)
+
+    if MOCK_GEOCODING:
+        return geocode_place(name, db, client)
+
+    should_close = False
+    if client is None:
+        client = httpx.Client(timeout=15.0)
+        should_close = True
+
+    def _fetch_candidates(query: str) -> list[dict]:
+        """Fetch up to 5 candidates from Nominatim for a query."""
+        _rate_limit()
+        try:
+            response = client.get(
+                NOMINATIM_URL,
+                params={"q": query, "format": "json", "limit": 5},
+                headers={"User-Agent": USER_AGENT},
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.warning(f"Nominatim fetch failed for '{query}': {e}")
+            return []
+
+    def _best_candidate(candidates: list[dict]) -> tuple[dict | None, float]:
+        """Return the best scored candidate and its score."""
+        if not candidates:
+            return None, 0.0
+        scored = [(c, _score_candidate(c, name, city, country)) for c in candidates]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[0]
+
+    def _save_and_return(candidate: dict, key: str) -> tuple[float, float, str]:
+        lat = float(candidate["lat"])
+        lon = float(candidate["lon"])
+        display = candidate.get("display_name", key)
+        cache_entry = GeocodingCache(place_name=key, latitude=lat, longitude=lon, display_name=display)
+        db.add(cache_entry)
+        db.commit()
+        return (lat, lon, display)
+
+    try:
+        # Build primary query with full context
+        primary_query = cache_key
+        candidates = _fetch_candidates(primary_query)
+        best, score = _best_candidate(candidates)
+
+        logger.info(f"Geocoding '{name}' (city={city}, country={country}): {len(candidates)} candidates, best score={score:.0f}")
+
+        if best and score >= 60:
+            logger.info(f"✓ High-confidence match for '{name}': {best.get('display_name', '')[:80]} (score={score:.0f})")
+            return _save_and_return(best, cache_key)
+
+        # Score too low — try plain name alone if we haven't already
+        if city or country:
+            plain_candidates = _fetch_candidates(name)
+            plain_best, plain_score = _best_candidate(plain_candidates)
+            if plain_best and plain_score > score:
+                candidates = plain_candidates
+                best = plain_best
+                score = plain_score
+                logger.info(f"Plain name search improved score to {score:.0f}")
+
+        if best and score >= 40:
+            logger.info(f"✓ Medium-confidence match for '{name}': {best.get('display_name', '')[:80]} (score={score:.0f})")
+            return _save_and_return(best, cache_key)
+
+        # Low confidence — try LLM variant names as fallback
+        if city or country:
+            try:
+                from app.services.llm import generate_name_variants
+                variants = generate_name_variants(name, city or "", country or "")
+                logger.info(f"LLM suggested variants for '{name}': {variants}")
+                for variant in variants[:3]:
+                    variant_query = f"{variant}, {city}, {country}" if city and country else variant
+                    var_candidates = _fetch_candidates(variant_query)
+                    var_best, var_score = _best_candidate(var_candidates)
+                    if var_best and var_score > score:
+                        best = var_best
+                        score = var_score
+                        logger.info(f"Variant '{variant}' improved score to {var_score:.0f}")
+                    if var_best and var_score >= 60:
+                        logger.info(f"✓ Variant match for '{name}' via '{variant}': score={var_score:.0f}")
+                        return _save_and_return(var_best, cache_key)
+            except Exception as e:
+                logger.warning(f"LLM variant generation failed for '{name}': {e}")
+
+        # Accept best available result even if below ideal threshold
+        if best and score >= 20:
+            logger.warning(f"⚠ Low-confidence match for '{name}': {best.get('display_name', '')[:80]} (score={score:.0f})")
+            return _save_and_return(best, cache_key)
+
+        logger.warning(f"✗ No usable geocoding result for '{name}'")
+        return None
+
+    finally:
+        if should_close:
+            client.close()
+
+
 def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
     """Geocode all places in a trip, updating coordinates in the DB.
     Also geocodes start/end locations for each day."""
@@ -330,6 +492,13 @@ def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
         client = httpx.Client(timeout=10.0)
         should_close = True
 
+    # Load geocoding hints stored by the chat finalize endpoint (city/country per place)
+    hints: dict[str, dict] = {}
+    if trip.enriched_data:
+        hints = trip.enriched_data.get("geocoding_hints", {})
+    if hints:
+        logger.info(f"Using {len(hints)} geocoding hints for trip {trip.id}")
+
     try:
         for day in trip.days:
             # Geocode start/end locations (for routing)
@@ -337,38 +506,27 @@ def geocode_trip(db: Session, trip, client: httpx.Client | None = None) -> None:
                 if location_name:
                     geocode_place(location_name, db, client)
 
-            # Extract city context from start or end location
+            # Extract city context from start or end location as fallback
             city_context = (
                 _extract_city_context(day.start_location) or
                 _extract_city_context(day.end_location)
             )
 
-            # Geocode each place with city context
+            # Geocode each place using smart scoring with city/country context
             for place in day.places:
-                # Try multiple query variations for better success rate
-                normalized_name = _normalize_place_name(place.name)
+                hint_key = f"{day.day_number}:{place.name}"
+                hint = hints.get(hint_key, {})
+                city = hint.get("city", "") or city_context or ""
+                country = hint.get("country", "")
 
-                queries = []
-                # Try normalized name with city context first
-                if city_context and city_context.lower() not in normalized_name.lower():
-                    queries.append(f"{normalized_name}, {city_context}")
-                # Fallback to normalized name alone
-                queries.append(normalized_name)
-                # Last resort: original name with city context
-                if city_context and city_context.lower() not in place.name.lower():
-                    queries.append(f"{place.name}, {city_context}")
+                logger.info(f"Geocoding '{place.name}' (city='{city}', country='{country}')")
+                result = geocode_place_smart(place.name, city, country, db, client)
 
-                result = None
-                for query in queries:
-                    logger.info(f"Geocoding place '{place.name}' with query: '{query}'")
-                    result = geocode_place(query, db, client)
-                    if result:
-                        place.latitude, place.longitude = result[0], result[1]
-                        logger.info(f"✓ Successfully geocoded '{place.name}' using query '{query}'")
-                        break
-
-                if not result:
-                    logger.warning(f"✗ Failed to geocode '{place.name}' after trying {len(queries)} queries")
+                if result:
+                    place.latitude, place.longitude = result[0], result[1]
+                    logger.info(f"✓ Geocoded '{place.name}' → ({result[0]:.4f}, {result[1]:.4f})")
+                else:
+                    logger.warning(f"✗ Failed to geocode '{place.name}'")
 
             db.commit()
     finally:

@@ -48,7 +48,7 @@ Required schema:
       "start_location": "Hotel or accommodation name",
       "end_location": "Hotel or accommodation name",
       "places": [
-        {"name": "Place name", "place_type": "attraction"}
+        {"name": "Place name", "place_type": "attraction", "city": "City name", "country": "Country name"}
       ]
     }
   ]
@@ -60,7 +60,9 @@ Rules:
 - Maximum 5 places per day
 - start_location and end_location should be the hotel/accommodation for that night (can be the same value)
 - Dates in YYYY-MM-DD format, or null if not mentioned
-- If no hotel was mentioned for a day, use the destination city name as start_location and end_location"""
+- If no hotel was mentioned for a day, use the destination city name as start_location and end_location
+- city and country MUST be included for every place — use the destination city/country if unsure
+- Use the official English name for city and country (e.g., "Paris", "France")"""
 
 
 def chat_with_llm(messages: list[dict]) -> str:
@@ -94,6 +96,33 @@ def generate_itinerary_json(messages: list[dict]) -> dict:
     raw = response.choices[0].message.content
     logger.info(f"LLM JSON raw (first 300 chars): {raw[:300]}")
     return json.loads(_strip_markdown(raw))
+
+
+def generate_name_variants(place: str, city: str, country: str) -> list[str]:
+    """Ask LLM for alternative official names for a place when geocoding fails.
+    Returns up to 3 alternative name strings to retry geocoding with."""
+    client = _get_client()
+    prompt = (
+        f'Provide up to 3 alternative official or commonly used names for "{place}" in {city}, {country}. '
+        f'Output a JSON array of strings only. Example: ["Alt Name 1", "Alt Name 2", "Alt Name 3"]. '
+        f'If you are not sure, return an empty array [].'
+    )
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=128,
+        )
+        raw = response.choices[0].message.content.strip()
+        # Extract JSON array from response
+        match = re.search(r'\[.*?\]', raw, re.DOTALL)
+        if match:
+            variants = json.loads(match.group(0))
+            return [v for v in variants if isinstance(v, str) and v.strip()]
+    except Exception as e:
+        logger.warning(f"generate_name_variants failed for '{place}': {e}")
+    return []
 
 
 def _strip_markdown(text: str) -> str:

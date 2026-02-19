@@ -106,6 +106,37 @@
 
 ---
 
+## ✅ Phase 11: Geocoding Accuracy Upgrade (COMPLETED)
+
+### Problem
+AI chat interface was working but geocoding results were inaccurate — wrong places found or geocoding failures because:
+1. LLM JSON only output `name` + `place_type` per place, no city/country context
+2. Nominatim called with `limit=1` — first result blindly accepted even if wrong
+3. No confidence scoring or fallback strategy
+
+### Solution (4-file change, no DB migration)
+
+**`backend/app/services/llm.py`**
+- Updated `JSON_SYSTEM_PROMPT` to require `city` and `country` per place
+- Added `generate_name_variants(place, city, country)` — LLM fallback that suggests alternative names when geocoding fails
+
+**`backend/app/schemas.py`**
+- Added `city: Optional[str] = None` and `country: Optional[str] = None` to `PlaceInput`
+
+**`backend/app/routers/chat.py`**
+- At finalize time, builds `geocoding_hints` dict: `{ "1:Eiffel Tower": {"city": "Paris", "country": "France"} }`
+- Stored in `trip.enriched_data` before pipeline launches
+
+**`backend/app/services/geocoding.py`**
+- Added `_score_candidate(candidate, name, city, country)`: name match +50, city +20, country +20, importance bonus
+- Added `geocode_place_smart(name, city, country, db, client)`:
+  - Builds query `"Place, City, Country"`, fetches 5 candidates, scores them
+  - If score ≥ 60: accept (high confidence)
+  - If score ≥ 40: accept (medium confidence)
+  - If score < 40: call LLM for variant names and retry
+  - Accept best ≥ 20 (low confidence, with warning log)
+- Updated `geocode_trip()` to read `geocoding_hints` from `enriched_data` and call `geocode_place_smart()`
+
 ## 📊 Progress Tracker
 
 | Phase | Status | Files Changed | Time |
@@ -113,6 +144,7 @@
 | Phase 7: UX Improvements | ✅ Complete | 10 files | 3h |
 | Phase 8: Enrichment Accuracy | ✅ Complete | 1 file (backend) | 2h |
 | Phase 9: UX Improvements | ✅ Complete | 2 files (frontend) | 45min |
+| Phase 11: Geocoding Accuracy | ✅ Complete | 4 files (backend) | 1h |
 
 ---
 
