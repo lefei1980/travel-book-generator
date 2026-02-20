@@ -137,6 +137,43 @@ AI chat interface was working but geocoding results were inaccurate — wrong pl
   - Accept best ≥ 20 (low confidence, with warning log)
 - Updated `geocode_trip()` to read `geocoding_hints` from `enriched_data` and call `geocode_place_smart()`
 
+## ✅ Phase 12: Geocoding Bug Fixes (COMPLETED)
+
+### Problems Fixed
+
+1. **Restaurants geocoded to wrong countries** — "El Mesón" → Tenerife Spain (score=52), "La Estación" → Colombia (score=52)
+   - Fix: Country validation in `geocode_place_smart()` — reject any Nominatim result where expected country is absent from `display_name`
+
+2. **Start/end flags missing for vague accommodation names** — "AirBnb near Loiza" returns 0 Nominatim candidates
+   - Fix: `_extract_neighborhood()` extracts "Loiza" from "AirBnb near Loiza"; `geocode_trip()` tries neighborhood then day-level city as fallback; stores approx coords under original cache key
+
+3. **OSRM 400 Bad Request errors** caused by wrong-hemisphere coordinates included as waypoints
+   - Fix: Resolved by fixing restaurant geocoding (country validation prevents wrong-country results from ever being stored)
+
+### Files Changed
+- `backend/app/services/geocoding.py` — country validation, `_extract_neighborhood()`, city fallback in `geocode_trip()`
+
+## ✅ Phase 13: Map Bug Fixes (COMPLETED 2026-02-19)
+
+### Problems Fixed
+
+1. **Start/end flags missing on daily itinerary** (pipeline.py)
+   - Root cause: geocoding stage did not call `flag_modified(trip, "enriched_data")` before `db.commit()`, so SQLAlchemy did not detect the JSON mutation and `start_end_coords` was never persisted to SQLite. All other pipeline stages (routing, enriching, rendering) correctly call `flag_modified`.
+   - Fix: Added `dict()` copy + `flag_modified(trip, "enriched_data")` in the geocoding stage, matching the pattern used by other stages.
+
+2. **Restaurants included in route planning** (routing.py)
+   - Root cause: `_build_waypoints()` included ALL places (including restaurants) as OSRM waypoints. Restaurant geocoding is unreliable, leading to cross-city detours.
+   - Fix: Skip `place_type == 'restaurant'` in waypoint construction. Restaurants are still shown on the map with numbered markers but excluded from the driving route.
+
+3. **Daily map zoom missing start/end** — auto-fixed by #1
+   - The template already adds `start_coords`/`end_coords` to `bounds` when they exist. Once `start_end_coords` is correctly persisted (fix #1), the map automatically zooms to include start, all attractions, and end.
+
+### Files Changed
+- `backend/app/services/pipeline.py` — geocoding stage: `dict()` copy + `flag_modified`
+- `backend/app/services/routing.py` — `_build_waypoints`: skip restaurants
+
+---
+
 ## 📊 Progress Tracker
 
 | Phase | Status | Files Changed | Time |
@@ -145,6 +182,7 @@ AI chat interface was working but geocoding results were inaccurate — wrong pl
 | Phase 8: Enrichment Accuracy | ✅ Complete | 1 file (backend) | 2h |
 | Phase 9: UX Improvements | ✅ Complete | 2 files (frontend) | 45min |
 | Phase 11: Geocoding Accuracy | ✅ Complete | 4 files (backend) | 1h |
+| Phase 12: Geocoding Bug Fixes | ✅ Complete | 1 file (backend) | 1h |
 
 ---
 
@@ -187,6 +225,21 @@ AI chat interface was working but geocoding results were inaccurate — wrong pl
      - Use case: Multi-night stays at different hotels
 
 - 📦 All changes deployed and live in production
+
+**Session 2026-02-18 (COMPLETED):**
+
+### Phase 11: Geocoding Accuracy Upgrade ✅
+- Updated `llm.py` JSON prompt to require city/country per place
+- Added `generate_name_variants()` LLM fallback
+- Added `city/country` to `PlaceInput` schema
+- `chat.py` stores `geocoding_hints` in `enriched_data` at finalize time
+- `geocoding.py`: `_score_candidate()`, `geocode_place_smart()`, updated `geocode_trip()`
+- `routing.py` + `pipeline.py`: prefer prefix-match cache entries
+
+### Phase 12: Geocoding Bug Fixes ✅
+- Country validation in `geocode_place_smart()` — prevents wrong-country results (score=52 no longer enough if country absent)
+- `_extract_neighborhood()` — extracts geocodable neighborhood from vague descriptions
+- City/neighborhood fallback in `geocode_trip()` for ungeocodable start/end locations
 
 **Previous Session 2026-02-15:**
 - ✅ Fixed deployment issues (mixed content, geocoding, enrichment)

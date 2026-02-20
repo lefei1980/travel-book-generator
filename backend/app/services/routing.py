@@ -34,8 +34,10 @@ def _build_waypoints(day, db: Session) -> list[tuple[float, float]]:
         if coords:
             waypoints.append(coords)
 
-    # Places in order
+    # Attractions only — restaurants are shown on the map but not used for route planning
     for place in day.places:
+        if place.place_type == 'restaurant':
+            continue
         if place.longitude is not None and place.latitude is not None:
             waypoints.append((place.longitude, place.latitude))
 

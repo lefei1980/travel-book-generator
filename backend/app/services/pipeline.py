@@ -80,9 +80,11 @@ def run_pipeline(trip_id: str) -> None:
                             coords["end"] = {"lat": cached.latitude, "lng": cached.longitude, "name": day.end_location}
                     start_end_coords[str(day.day_number)] = coords
 
-                enriched = trip.enriched_data or {}
+                enriched = dict(trip.enriched_data or {})
                 enriched["start_end_coords"] = start_end_coords
                 trip.enriched_data = enriched
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(trip, "enriched_data")
                 db.commit()
 
             elif stage == "routing":
