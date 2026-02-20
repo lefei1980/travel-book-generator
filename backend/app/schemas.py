@@ -132,3 +132,7 @@ class TripResponse(BaseModel):
 class TripCreateResponse(BaseModel):
     id: str
     status: str
+
+
+class EditTripResponse(BaseModel):
+    session_id: str

@@ -83,15 +83,48 @@ def finalize_itinerary(
             detail="The itinerary structure was invalid. Please add more details (hotels, dates, places) and try again.",
         )
 
-    # Create Trip record
-    trip = Trip(
-        title=trip_request.title,
-        start_date=trip_request.start_date,
-        end_date=trip_request.end_date,
-        status="pending",
-    )
-    db.add(trip)
-    db.flush()
+    # Check if this session already has a trip (user is editing)
+    if session.trip_id:
+        # Update existing trip
+        trip = db.query(Trip).filter(Trip.id == session.trip_id).first()
+        if not trip:
+            # Trip was deleted, create a new one
+            logger.warning(f"Session {session_id} referenced deleted trip {session.trip_id}, creating new trip")
+            trip = Trip(
+                title=trip_request.title,
+                start_date=trip_request.start_date,
+                end_date=trip_request.end_date,
+                status="pending",
+            )
+            db.add(trip)
+            db.flush()
+            session.trip_id = trip.id
+        else:
+            # Update existing trip
+            logger.info(f"Updating existing trip {trip.id} from session {session_id}")
+            trip.title = trip_request.title
+            trip.start_date = trip_request.start_date
+            trip.end_date = trip_request.end_date
+            trip.status = "pending"
+            trip.error_message = None
+            trip.pdf_path = None
+            trip.enriched_data = None
+
+            # Delete existing days and places (cascade will handle places)
+            for day in trip.days:
+                db.delete(day)
+            db.flush()
+    else:
+        # Create new trip
+        trip = Trip(
+            title=trip_request.title,
+            start_date=trip_request.start_date,
+            end_date=trip_request.end_date,
+            status="pending",
+        )
+        db.add(trip)
+        db.flush()
+        session.trip_id = trip.id
 
     # Build geocoding hints from city/country fields provided by LLM
     geocoding_hints: dict[str, dict] = {}
@@ -127,8 +160,6 @@ def finalize_itinerary(
         trip.enriched_data = {"geocoding_hints": geocoding_hints}
         logger.info(f"Stored {len(geocoding_hints)} geocoding hints for trip {trip.id}")
 
-    # Link session to trip and persist
-    session.trip_id = trip.id
     db.commit()
     db.refresh(trip)
 

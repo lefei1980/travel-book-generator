@@ -8,6 +8,8 @@ import {
   getDownloadUrl,
   getPreviewUrl,
   generatePDF,
+  editTrip,
+  getChatSession,
 } from "@/lib/api";
 
 interface Message {
@@ -155,6 +157,29 @@ export default function ChatPlanner() {
     setGeneratingPDF(false);
   };
 
+  const handleEditTrip = async () => {
+    if (!tripId) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Get the session_id for this trip
+      const editResponse = await editTrip(tripId);
+      const sessionResponse = await getChatSession(editResponse.session_id);
+
+      // Load the conversation history
+      setSessionId(editResponse.session_id);
+      setMessages(sessionResponse.messages as Message[]);
+
+      // Switch back to chat view
+      setViewMode("chat");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to edit trip");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // --- Preview view ---
   if (viewMode === "preview" && tripId && tripStatus === "preview_ready") {
     return (
@@ -174,6 +199,13 @@ export default function ChatPlanner() {
                   className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
                 >
                   Plan another trip
+                </button>
+                <button
+                  onClick={handleEditTrip}
+                  disabled={isLoading}
+                  className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-medium disabled:opacity-50"
+                >
+                  {isLoading ? "Loading..." : "Edit Trip"}
                 </button>
                 <button
                   onClick={handleSaveAsPDF}

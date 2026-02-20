@@ -141,6 +141,15 @@ export interface FinalizeResponse {
   status: string;
 }
 
+export interface EditTripResponse {
+  session_id: string;
+}
+
+export interface ChatSessionResponse {
+  session_id: string;
+  messages: Array<{ role: string; content: string }>;
+}
+
 export async function sendChatMessage(
   data: ChatMessageRequest
 ): Promise<ChatMessageResponse> {
@@ -163,6 +172,26 @@ export async function finalizeChat(sessionId: string): Promise<FinalizeResponse>
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.detail || "Failed to finalize itinerary");
+  }
+  return res.json();
+}
+
+export async function editTrip(tripId: string): Promise<EditTripResponse> {
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/edit`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || "This trip cannot be edited via chat");
+  }
+  return res.json();
+}
+
+export async function getChatSession(sessionId: string): Promise<ChatSessionResponse> {
+  const res = await fetch(`${API_BASE}/api/chat/${sessionId}`);
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || "Failed to load chat session");
   }
   return res.json();
 }

@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Trip, Day, Place
-from app.schemas import TripCreateRequest, TripResponse, TripCreateResponse
+from app.models import Trip, Day, Place, ChatSession
+from app.schemas import TripCreateRequest, TripResponse, TripCreateResponse, EditTripResponse
 from app.services.pipeline import run_pipeline
 from app.services.pdf import generate_pdf
 import logging
@@ -194,3 +194,22 @@ def download_trip(trip_id: str, db: Session = Depends(get_db)):
     if not trip.pdf_path:
         raise HTTPException(status_code=404, detail="PDF not generated yet")
     return FileResponse(trip.pdf_path, media_type="application/pdf", filename=f"{trip.title}.pdf")
+
+
+@router.post("/{trip_id}/edit", response_model=EditTripResponse)
+def edit_trip(trip_id: str, db: Session = Depends(get_db)):
+    """Return the chat session_id for a trip so user can edit it via AI chat."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    # Find the associated chat session
+    session = db.query(ChatSession).filter(ChatSession.trip_id == trip_id).first()
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="No chat session found for this trip. This trip was created manually."
+        )
+
+    logger.info(f"Returning session {session.id} for trip {trip_id} edit")
+    return EditTripResponse(session_id=session.id)
